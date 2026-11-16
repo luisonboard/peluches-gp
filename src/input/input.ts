@@ -9,6 +9,8 @@ export interface Controls {
   drift: boolean;
   item: boolean;
   power: boolean;
+  /** Mantener para mirar hacia atrás. */
+  look: boolean;
 }
 
 export type MenuKey = 'left' | 'right' | 'up' | 'down' | 'ok' | 'back';
@@ -30,6 +32,7 @@ export class Input {
   private lastPad = -1;
   /** Se llama en la primera interacción (para desbloquear el audio). */
   onFirstInteraction: () => void = () => {};
+  onFullscreenKey: () => void = () => {};
   private interacted = false;
 
   constructor() {
@@ -41,6 +44,7 @@ export class Input {
         this.touch();
         if (!e.repeat) {
           if (e.code === 'Escape' || e.code === 'KeyP') this.pauseQueued = true;
+          if (e.code === 'KeyF') this.onFullscreenKey();
           const m = KEY_MENU[e.code];
           if (m) this.menuQueue.push(m);
         }
@@ -71,6 +75,7 @@ export class Input {
     let drift = k.has('Space');
     let item = k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyK');
     let power = k.has('KeyE') || k.has('KeyL');
+    let look = k.has('KeyC');
 
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     for (const p of pads) {
@@ -87,6 +92,7 @@ export class Input {
       drift ||= b(5);
       item ||= b(4) || b(6) || b(2);
       power ||= b(3);
+      look ||= b(8) || b(11);
 
       // Bordes para menús y pausa.
       const any = p.buttons.some((x) => x.pressed) || Math.abs(ax) > 0.5;
@@ -106,7 +112,7 @@ export class Input {
       this.padPrev = p.buttons.map((x) => x.pressed);
       break; // un solo mando por dispositivo en el hito 1
     }
-    return { steer: Math.max(-1, Math.min(1, steer)), throttle, brake, drift, item, power };
+    return { steer: Math.max(-1, Math.min(1, steer)), throttle, brake, drift, item, power, look };
   }
 
   /** Mando conectado y botones pulsados (para la prueba del mando en Ajustes). */

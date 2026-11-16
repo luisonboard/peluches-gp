@@ -26,7 +26,31 @@ export class ChaseCam {
     this.shakeT = 0.3;
   }
 
-  update(dt: number, k: Kart): void {
+  private back = false;
+
+  /** `lookBack`: cámara delante del kart mirando hacia atrás (se ve al propio peluche y a los que vienen detrás). */
+  update(dt: number, k: Kart, lookBack = false): void {
+    if (lookBack !== this.back) {
+      this.back = lookBack;
+      this.init = false;
+    }
+    if (lookBack) {
+      const fx = Math.sin(k.heading);
+      const fz = Math.cos(k.heading);
+      this.desired.set(k.pos.x + fx * 6, k.pos.y + 2.3, k.pos.z + fz * 6);
+      this.lookAt.set(k.pos.x - fx * 5, k.pos.y + 1.1, k.pos.z - fz * 5);
+      if (!this.init) {
+        this.pos.copy(this.desired);
+        this.look.copy(this.lookAt);
+        this.init = true;
+      }
+      this.pos.lerp(this.desired, 1 - Math.exp(-16 * dt));
+      this.pos.y = Math.max(this.pos.y, k.groundY + 1.2);
+      this.look.lerp(this.lookAt, 1 - Math.exp(-20 * dt));
+      this.cam.position.copy(this.pos);
+      this.cam.lookAt(this.look);
+      return;
+    }
     const target = k.heading - k.driftVisual * 0.35;
     if (!this.init) this.yaw = target;
     this.yaw = wrapAngle(this.yaw + wrapAngle(target - this.yaw) * Math.min(1, dt * 7));

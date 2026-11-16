@@ -25,7 +25,7 @@ const CSS = `
 body.pgp-touch-on #hud-pos { bottom: auto; top: calc(max(14px, env(safe-area-inset-top)) + 84px); font-size: clamp(44px, 9vh, 72px); }
 `;
 
-type Key = 'left' | 'right' | 'gas' | 'brake' | 'drift' | 'item' | 'power' | 'use';
+type Key = 'left' | 'right' | 'gas' | 'brake' | 'drift' | 'item' | 'power' | 'use' | 'look';
 
 export function isTouchDevice(): boolean {
   return matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || new URLSearchParams(location.search).has('touch');
@@ -35,7 +35,7 @@ export class TouchControls {
   private root = document.createElement('div');
   private rotate = document.createElement('div');
   private held = new Map<number, Key>();
-  private state: Record<Key, boolean> = { left: false, right: false, gas: false, brake: false, drift: false, item: false, power: false, use: false };
+  private state: Record<Key, boolean> = { left: false, right: false, gas: false, brake: false, drift: false, item: false, power: false, use: false, look: false };
   private btns = new Map<Key, HTMLElement>();
   private wheel: HTMLElement | null = null;
   private visible = false;
@@ -104,7 +104,9 @@ export class TouchControls {
       mk('power', '<span><span class="ic">⚡</span>Poder</span>', 76, { right: `calc(${R} + 12px)`, bottom: `calc(${B} + 114px)` });
     }
     if (!s.autoAccel) mk('gas', '<span><span class="ic">▲</span>Acelerar</span>', 90, { right: `calc(${R} + ${peque ? 228 : 210}px)`, bottom: B });
-    mk('pause', '<span class="ic" style="font-size:22px">❚❚</span>', 52, { right: `calc(${R} + 4px)`, top: 'calc(max(12px, env(safe-area-inset-top)) + clamp(118px, 26vh, 200px))' });
+    const topR = 'calc(max(12px, env(safe-area-inset-top)) + clamp(118px, 26vh, 200px))';
+    mk('pause', '<span class="ic" style="font-size:22px">❚❚</span>', 52, { right: `calc(${R} + 4px)`, top: topR });
+    mk('look', '<span class="ic" style="font-size:24px">👀</span>', 52, { right: `calc(${R} + 66px)`, top: topR });
   }
 
   show(v: boolean): void {
@@ -160,6 +162,7 @@ export class TouchControls {
     if (t.gas) c.throttle = 1;
     if (t.brake) c.brake = 1;
     c.drift ||= t.drift;
+    c.look ||= t.look;
     c.item ||= t.item || (t.use && !powerReady);
     c.power ||= t.power || (t.use && powerReady);
     this.btns.get('use')?.classList.toggle('ready', powerReady);

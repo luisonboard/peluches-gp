@@ -29,6 +29,7 @@ import { Gyro } from './input/gyro';
 import { TouchControls, isTouchDevice } from './input/touch';
 import { Voice } from './audio/voice';
 import { openSettings } from './ui/settings';
+import { toggleFullscreen, fullscreenSupported } from './ui/fullscreen';
 
 installErrorHooks();
 
@@ -56,6 +57,7 @@ const plushMats = new PlushMaterials(quality.name !== 'low');
 const audio = new GameAudio(!params.noaudio);
 const input = new Input();
 input.onFirstInteraction = () => audio.unlock();
+input.onFullscreenKey = () => toggleFullscreen();
 const hud = new Hud();
 hud.setTrack(track);
 
@@ -184,6 +186,7 @@ function showTitle(): void {
     startRace,
     () => showSettings(showTitle),
     titleStatus(),
+    fullscreenSupported() ? toggleFullscreen : null,
   );
 }
 
@@ -221,7 +224,7 @@ function pause(): void {
     mode = 'race';
     touch.show(touchOn);
   };
-  hud.showPause(resume, startRace, showTitle, () => showSettings(pause2));
+  hud.showPause(resume, startRace, showTitle, () => showSettings(pause2), fullscreenSupported() ? toggleFullscreen : null);
   function pause2(): void {
     mode = 'race';
     pause();
@@ -481,7 +484,7 @@ function frame(dt: number): void {
     /* cámara libre: se mueve desde DevTools (__game.camera) */
   } else if (params.cam === 'top') topCam(camera, track);
   else if (mode === 'title') orbitCam(camera, track, titleT);
-  else if (mode !== 'paused') chase.update(dt, p);
+  else if (mode !== 'paused') chase.update(dt, p, mode === 'race' && ctl.look);
   followSun(stage, p.pos.x, p.pos.y, p.pos.z);
 
   if (mode !== 'paused') {

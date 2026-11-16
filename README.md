@@ -24,8 +24,10 @@ npm run typecheck
 | Usar objeto | Shift / K | L, ZL o Y |
 | Poder del peluche (barra llena) | E / L | X |
 | Pausa | Esc / P | + |
+| Mirar atrás (mantener) | C | − o R3 |
+| Pantalla completa | F | — |
 
-En el teléfono aparecen botones táctiles (en horizontal): ◀ ▶ o volante por giroscopio, Frenar, Derrapar y Objeto/Poder
+En el teléfono aparecen botones táctiles (en horizontal): ◀ ▶ o volante por giroscopio, Frenar, Derrapar, Objeto/Poder y 👀 (mirar atrás)
 (en el perfil Peque, un solo botón "¡Usar!"). Ajustes (⚙ en el título o en la pausa): perfil, ayuda de manejo, voz,
 volante, nombres de los peluches y prueba del mando.
 | Menús | Flechas + Enter | Palanca/cruceta + B |

@@ -338,7 +338,7 @@ export class Hud {
     }
   }
 
-  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string): void {
+  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string, onFullscreen: (() => void) | null): void {
     const wrap = el('div');
     wrap.style.width = 'min(760px, 100%)';
     const logo = el('div', 'pgp-logo');
@@ -399,10 +399,18 @@ export class Hud {
     gear.style.cssText = 'margin:0;background:#2f7de0;box-shadow:0 7px 0 #1d5aa8;font-size:20px;padding:12px 22px';
     gear.onclick = () => onSettings();
     goRow.append(go, gear);
+    if (onFullscreen) {
+      const fs = el('button', 'pgp-go', '⛶');
+      fs.title = 'Pantalla completa';
+      fs.setAttribute('aria-label', 'Pantalla completa');
+      fs.style.cssText = 'margin:0;background:#8a4fd8;box-shadow:0 7px 0 #5e2fa3;font-size:24px;padding:10px 18px';
+      fs.onclick = () => onFullscreen();
+      goRow.append(fs);
+    }
     goRow.style.marginTop = '18px';
     card.append(goRow);
     card.append(el('div', 'pgp-hint', status));
-    card.append(el('div', 'pgp-hint', 'Teclado: flechas · Espacio derrapa · Shift objeto · E poder &nbsp;|&nbsp; Mando: B acelera · A frena · R derrapa · L objeto · X poder'));
+    card.append(el('div', 'pgp-hint', 'Teclado: flechas · Espacio derrapa · Shift objeto · E poder · C mira atrás · F pantalla completa &nbsp;|&nbsp; Mando: B acelera · A frena · R derrapa · L objeto · X poder · − mira atrás'));
 
     const s = { ...setup };
     const refresh = (): void => {
@@ -441,7 +449,7 @@ export class Hud {
     charRow.classList.add('focus');
   }
 
-  showPause(onResume: () => void, onRestart: () => void, onMenu: () => void, onSettings: () => void): void {
+  showPause(onResume: () => void, onRestart: () => void, onMenu: () => void, onSettings: () => void, onFullscreen: (() => void) | null): void {
     const card = el('div', 'pgp-card pgp-results');
     card.style.width = 'min(420px, 100%)';
     card.append(el('h2', '', 'Pausa'));
@@ -457,10 +465,12 @@ export class Hud {
     const a = mk('Seguir', '', onResume);
     const b = mk('Empezar de nuevo', 'alt', onRestart);
     const d = mk('Ajustes', 'alt', onSettings);
-    const c = mk('Menú', 'alt', onMenu);
+    const rows: [HTMLElement, () => void][] = [[a, onResume], [b, onRestart], [d, onSettings]];
+    if (onFullscreen) rows.push([mk('Pantalla completa', 'alt', onFullscreen), onFullscreen]);
+    rows.push([mk('Menú', 'alt', onMenu), onMenu]);
     card.append(btns);
     this.openScreen(card, true);
-    this.menuRows = [a, b, d, c].map((e, i) => ({ el: e, ok: [onResume, onRestart, onSettings, onMenu][i] }));
+    this.menuRows = rows.map(([e, fn]) => ({ el: e, ok: fn }));
     this.focus = 0;
     this.menuInput([]);
   }
