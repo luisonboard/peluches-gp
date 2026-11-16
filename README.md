@@ -1,7 +1,7 @@
 # Peluches GP
 
 Carreras de karts en 3D con los peluches de la casa (three.js 0.180 + TypeScript + Vite).
-Plan completo: [`PLAN.md`](PLAN.md) · página del plan: https://claude.ai/artifact/8o3YVSEW8t3RbbNTkvtMkC
+Juego publicado: https://peluches-gp.pages.dev · plan completo: [`PLAN.md`](PLAN.md) · página del plan: https://claude.ai/artifact/8o3YVSEW8t3RbbNTkvtMkC
 
 ## Uso
 
@@ -15,7 +15,7 @@ npm run typecheck
 
 ### Publicar
 
-- **Juego (Cloudflare Pages):** proyecto conectado al repositorio de GitHub, preset *Vite*, comando `npm run build`,
+- **Juego (Cloudflare Pages, https://peluches-gp.pages.dev):** proyecto `peluches-gp` conectado al repositorio de GitHub, preset *Vite*, comando `npm run build`,
   carpeta `dist`. Cada `git push` a `main` publica. `public/` trae el manifiesto, los íconos, el service worker
   (`sw.js`, sin conexión) y `_headers`.
 - **Relevo de salas (Worker de Cloudflare con Durable Object):** `cd relay && npm install && npx wrangler login`
@@ -171,6 +171,8 @@ del anfitrión (aviso al invitado).
 Comprobado en Chrome sin interfaz con la versión compilada servida aparte y el Worker en `wrangler dev`: manifiesto
 sin errores, service worker activo y controlando la página, recarga sin red con el juego en el título y 0 errores,
 y una sala creada en una pestaña y unida desde otra a través del Worker (transporte "relevo", los dos ven a los dos).
+Repetido con lo publicado (https://peluches-gp.pages.dev + Worker en workers.dev): mismos resultados; ida y vuelta
+de un mensaje por el relevo ≈ 68 ms desde Ecuador.
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 
