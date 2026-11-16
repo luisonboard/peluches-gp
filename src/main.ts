@@ -17,7 +17,8 @@ import { KartModel } from './game/kartModel';
 import { Kart, TUNING } from './game/kart';
 import { AIDriver } from './game/ai';
 import { Race, CPU_LEVELS } from './game/race';
-import { ChaseCam, orbitCam, topCam } from './game/camera';
+import { ChaseCam, topCam, showroomCam, podiumCam } from './game/camera';
+import { Podium } from './world/podium';
 import { Particles } from './fx/particles';
 import { GameAudio } from './audio/audio';
 import { Hud, type TitleSetup } from './ui/hud';
@@ -58,6 +59,9 @@ scene.add(sparks.points, dust.points);
 const arena = new Arena(track, tex, sparks, dust, rng.fork('objetos'));
 scene.add(arena.group);
 const plushMats = new PlushMaterials(quality.name !== 'low');
+// Podio en el centro del circuito, mirando hacia la recta de salida.
+const podium = new Podium(new THREE.Vector3(-5 * track.def.scale, 0, 30 * track.def.scale), Math.PI, tex, plushMats, dust);
+scene.add(podium.group);
 
 const audio = new GameAudio(!params.noaudio);
 const input = new Input();
@@ -84,6 +88,28 @@ resize();
 // ---------------- Estado del juego ----------------
 
 type Mode = 'title' | 'race' | 'paused' | 'results';
+let podiumT = 0;
+
+/** Título: el kart elegido va a un tramo vacío de la pista, lejos de la parrilla. */
+function placeShowroomKart(): void {
+  karts[0]?.placeAt(track.N - 48, 0);
+}
+
+/** En el título, el peluche queda a un lado y el menú al otro (o arriba y abajo en vertical). */
+function frameShowroom(side = 0.22, top = 0.3): void {
+  const w = app.clientWidth;
+  const h = app.clientHeight;
+  const wide = w / h > 1.2 && w >= 820;
+  const tall = h / w > 1.2;
+  const ox = wide ? w * side : 0;
+  const oy = tall ? h * top : 0;
+  if (!ox && !oy) {
+    if (camera.view?.enabled) camera.clearViewOffset();
+    return;
+  }
+  const v = camera.view;
+  if (!v?.enabled || v.offsetX !== ox || v.offsetY !== oy || v.fullWidth !== w || v.fullHeight !== h) camera.setViewOffset(w, h, ox, oy, w, h);
+}
 let mode: Mode = 'title';
 let titleT = 0;
 const settings = loadSettings();
@@ -114,6 +140,8 @@ function applySettings(): void {
   gyro.sens = settings.gyroSens;
   gyro.invert = settings.gyroInvert;
   voice.enabled = settings.voice && !params.noaudio;
+  audio.setMusicOn(settings.music);
+  audio.muted = !settings.sfx;
   touch.configure(settings);
   if (race) {
     race.assist = { autoAccel: settings.autoAccel, smartSteer: settings.smartSteer };
@@ -200,6 +228,7 @@ function showTitle(): void {
   mode = 'title';
   loop.fpsLimit = params.fps ?? 30;
   buildRace();
+  placeShowroomKart();
   hud.setRaceVisible(false);
   touch.show(false);
   hud.showTitle(
@@ -208,7 +237,10 @@ function showTitle(): void {
       const charChanged = s.charIndex !== setup.charIndex;
       Object.assign(setup, s);
       storeSetup();
-      if (charChanged) buildRace();
+      if (charChanged) {
+        buildRace();
+        placeShowroomKart();
+      }
       audio.click();
     },
     startRace,
@@ -217,6 +249,9 @@ function showTitle(): void {
     fullscreenSupported() ? toggleFullscreen : null,
     () => openOnline(),
   );
+  hud.screenClass('title');
+  podium.hide();
+  audio.playMusic('menu');
 }
 
 function startRace(): void {
@@ -240,6 +275,9 @@ function startRace(): void {
 function beginRace(): void {
   hud.closeScreen();
   closeLobbyScreen();
+  podium.hide();
+  camera.clearViewOffset();
+  audio.playMusic('race');
   mode = 'race';
   loop.fpsLimit = params.fps ?? 60;
   dynRes.targetMs = 1000 / (loop.fpsLimit || 60);
@@ -255,8 +293,10 @@ function pause(): void {
   if (mode !== 'race') return;
   mode = 'paused';
   touch.show(false);
+  audio.music?.duck(true);
   const resume = (): void => {
     hud.closeScreen();
+    audio.music?.duck(false);
     mode = 'race';
     touch.show(touchOn);
   };
@@ -301,10 +341,13 @@ const session: Session = new Session(
 /** Vuelve al estado de título sin dibujar su menú (lo tapa la sala). */
 function toTitleQuiet(): void {
   mode = 'title';
+  podium.hide();
+  audio.playMusic('menu');
   loop.fpsLimit = params.fps ?? 30;
   hud.setRaceVisible(false);
   touch.show(false);
   if (!race || race.phase !== 'grid') buildRace();
+  placeShowroomKart();
 }
 
 function myChar(): (typeof CHARACTERS)[number] {
@@ -341,6 +384,8 @@ function renderLobby(): void {
       setup.charIndex = CHARACTERS.indexOf(ch);
       storeSetup();
       session.pick(c, displayName(ch));
+      buildRace();
+      placeShowroomKart();
     },
     options: (laps, cpu) => session.setOptions(laps, cpu),
     start: () => session.start(),
@@ -373,6 +418,7 @@ bus.on('kart:lap', ({ kart, lap }) => {
     hud.flash('¡Última vuelta!', true, '#ffd23a');
     audio.lap(true);
     voice.say('¡Última vuelta!');
+    if (audio.music) audio.music.tempoMul = 1.12;
   } else if (lap > 1 && lap <= race.laps) {
     hud.flash(`Vuelta ${lap}`, true);
     audio.lap(false);
@@ -383,6 +429,7 @@ bus.on('kart:finish', ({ kart, place }) => {
   hud.flash(place === 1 ? '¡Ganaste!' : '¡Meta!', false, '#ffd23a');
   audio.finish(place);
   voice.say(place === 1 ? '¡Ganaste!' : `¡Llegaste en el lugar ${place}!`);
+  audio.playMusic('none');
   input.rumble(0.6, 0.6, 400);
 });
 bus.on('kart:boost', ({ kart }) => {
@@ -588,6 +635,10 @@ function frame(dt: number): void {
 
   if (mode === 'title') {
     titleT += dt;
+    // El peluche elegido gira despacio sobre sí mismo y saluda.
+    const me = karts[0];
+    me.heading += dt * 0.55;
+    me.showoff = true;
     race.update(dt, ctl, camera);
   } else if (mode === 'race' || mode === 'results' || (mode === 'paused' && session.active)) {
     // En línea la carrera no se detiene en la pausa (los demás siguen corriendo).
@@ -600,6 +651,10 @@ function frame(dt: number): void {
         resultsShownAt = race.time;
         mode = 'results';
         touch.show(false);
+        podium.show(race.order.slice(0, 3).map((k) => k.char));
+        hud.setRaceVisible(false);
+        podiumT = 0;
+        audio.playMusic('menu');
         if (session.active && session.isHost) hud.showResults(race, () => {
             hud.closeScreen();
             toTitleQuiet();
@@ -607,6 +662,7 @@ function frame(dt: number): void {
           }, leaveOnline, 'Volver a la sala', 'Cerrar sala');
         else if (session.active) hud.showResults(race, () => {}, leaveOnline, 'Esperando al anfitrión…', 'Salir');
         else hud.showResults(race, startRace, showTitle);
+        hud.screenClass('side');
       } else if (resultsShownAt >= 0) hud.refreshResults(race);
     }
   }
@@ -616,9 +672,19 @@ function frame(dt: number): void {
   if (params.cam === 'free') {
     /* cámara libre: se mueve desde DevTools (__game.camera) */
   } else if (params.cam === 'top') topCam(camera, track);
-  else if (mode === 'title') orbitCam(camera, track, titleT);
+  else if (mode === 'title') {
+    showroomCam(camera, p, titleT);
+    frameShowroom();
+  } else if (mode === 'results' && podium.visible) {
+    podiumT += dt;
+    podiumCam(camera, podium.pos, podium.facing, podiumT);
+    frameShowroom(0.19, 0.24);
+  }
   else if (mode !== 'paused') chase.update(dt, p, mode === 'race' && ctl.look);
-  followSun(stage, p.pos.x, p.pos.y, p.pos.z);
+  if (mode !== 'title' && !(mode === 'results' && podium.visible) && camera.view?.enabled) camera.clearViewOffset();
+  if (podium.visible) followSun(stage, podium.pos.x, podium.pos.y, podium.pos.z);
+  else followSun(stage, p.pos.x, p.pos.y, p.pos.z);
+  podium.update(dt);
 
   if (mode !== 'paused') {
     trackVis.update(dt);

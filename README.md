@@ -138,6 +138,18 @@ anfitrión a 1–2 m (interpolación a 30 m/s), IA del anfitrión vista por el i
 el anfitrión, mismo orden de llegada en los dos, vuelta a la sala, desconexión del invitado (la IA toma su kart) y
 del anfitrión (aviso al invitado).
 
+**Hito 5 — presentación y sonido** (terminado):
+
+- Título con el peluche elegido en 3D a un lado (gira sobre sí mismo y saluda) y el menú al otro; en vertical, el
+  menú abajo. También detrás de la sala de espera.
+- Música sintetizada en tiempo real (`src/audio/music.ts`): pista tranquila con campanitas para los menús y pista
+  alegre para la carrera (batería, bajo, acordes y melodía, que alterna con un arpegio); en la última vuelta se
+  acelera un 12 %. Se baja en la pausa. Ajustes → Sonido: Música y Efectos por separado.
+- Podio final (`src/world/podium.ts`): bloques de juguete 1-2-3 con los tres primeros peluches celebrando, confeti
+  y la tabla de resultados a un lado (abajo en vertical).
+- Pantallas revisadas a 1280 × 720, 844 × 390 y 390 × 844: título, Ajustes, sala, pausa y resultados sin textos que
+  se pisen ni botones fuera de la pantalla.
+
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 
 | Calidad | fps | GPU | Triángulos |

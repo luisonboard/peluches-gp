@@ -86,6 +86,8 @@ const CSS = `
   .pgp-char .nm { font-size: 13px; }
   .pgp-opt { padding: 5px 14px; font-size: 15px; }
   .pgp-go { font-size: 22px; padding: 8px 32px; margin: 10px auto 0; }
+  .pgp-row .pgp-go { font-size: 16px !important; padding: 8px 14px !important; box-shadow: 0 5px 0 rgba(0,0,0,.22) !important; }
+  .pgp-screen.title .pgp-row[style*="margin-top"] { margin-top: 8px !important; }
 }
 #hud-item { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%);
   display: grid; justify-items: center; gap: 6px; }
@@ -107,7 +109,29 @@ const CSS = `
 @keyframes pgp-toast { 0% { transform: translateY(10px); opacity: 0 } 15% { transform: none; opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }
 .pgp-power-info { margin: 8px 4px 0; font-size: 15px; font-weight: 700; color: #4a4480; }
 .pgp-power-info b { color: #2a2050; }
+@media (max-height: 520px) {
+  .pgp-results h2 { font-size: 24px; margin-bottom: 6px; }
+  .pgp-results table { font-size: 14px !important; }
+  .pgp-results td { padding: 3px 6px; }
+  .pgp-results .btns { margin-top: 10px; }
+  .pgp-results .btns .pgp-go { font-size: 17px; padding: 8px 18px; }
+  .pgp-screen.side { align-items: center; }
+}
 @media (max-height: 520px) { .pgp-power-info { font-size: 12px; margin-top: 4px; } }
+@media (min-aspect-ratio: 6/5) and (min-width: 820px) {
+  .pgp-screen.title { justify-items: end; padding-right: max(32px, env(safe-area-inset-right)); }
+  .pgp-screen.title > div { width: min(640px, 56vw) !important; }
+  .pgp-screen.side { justify-items: end; padding-right: max(24px, env(safe-area-inset-right)); }
+  .pgp-screen.side .pgp-card { width: min(470px, 40vw) !important; }
+}
+@media (max-aspect-ratio: 5/6) {
+  .pgp-screen.title { align-items: end; }
+  .pgp-screen.side { align-items: end; }
+  .pgp-screen.side .pgp-card { max-height: 52vh; overflow-y: auto; }
+}
+.pgp-screen.side { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.pgp-screen.side .pgp-card { box-sizing: border-box; }
+.pgp-screen.side table { font-size: 16px; }
 #pgp-bench { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; background: rgba(20,18,50,.9); color: #fff;
   font: 600 14px/1.5 ui-monospace, Menlo, monospace; padding: 10px 14px; border-radius: 12px; white-space: pre; pointer-events: none; }
 `;
@@ -312,6 +336,11 @@ export class Hud {
     s.append(card);
     document.body.append(s);
     this.screen = s;
+  }
+
+  /** Añade una clase a la pantalla abierta (title, side). */
+  screenClass(cls: string): void {
+    this.screen?.classList.add(cls);
   }
 
   closeScreen(): void {

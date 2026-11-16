@@ -33,6 +33,13 @@ const CSS = `
   .pgp-lobby .code { font-size: 36px; }
   .pgp-lobby .qr { width: 96px; height: 96px; }
   .pgp-lobby h2 { font-size: 22px; margin: 0; }
+  .pgp-lobby .hint { display: none; }
+  .pgp-lobby .players { margin-top: 2px; gap: 6px; }
+  .pgp-lobby .pl { padding: 4px 8px; }
+  .pgp-lobby .pgp-label { margin: 4px 2px 2px; }
+  .pgp-lobby .btns { margin-top: 8px; }
+  .pgp-lobby .btns .pgp-go { font-size: 17px; padding: 8px 20px; }
+  .pgp-lobby .pgp-opt { padding: 4px 12px; font-size: 14px; }
 }
 `;
 

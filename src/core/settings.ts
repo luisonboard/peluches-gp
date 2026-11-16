@@ -14,6 +14,8 @@ export interface Settings {
   autoPower: boolean;
   /** Indicaciones en voz alta. */
   voice: boolean;
+  music: boolean;
+  sfx: boolean;
   /** Cómo se gira en el teléfono. */
   steerMode: SteerMode;
   gyroSens: GyroSens;
@@ -31,7 +33,7 @@ export const PROFILE_DEFAULTS: Record<Profile, Pick<Settings, 'autoAccel' | 'sma
 const KEY = 'pgp.settings';
 
 export function defaultSettings(): Settings {
-  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3 };
+  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3 };
 }
 
 export function loadSettings(): Settings {

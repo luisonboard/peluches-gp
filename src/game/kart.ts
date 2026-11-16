@@ -110,6 +110,8 @@ export class Kart {
   driftChargeMult = 1;
   /** La dirección asistida está activa (muestra la estrella guía). */
   assisted = false;
+  /** En el título: el peluche saluda. */
+  showoff = false;
   /** Ángulo visual del trompo. */
   spinVisual = 0;
   bubbleLift = 0;

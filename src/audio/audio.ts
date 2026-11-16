@@ -1,5 +1,6 @@
 // Audio sintetizado con Web Audio: motor del kart del jugador, chirrido de derrape y efectos.
 // Se crea en la primera interacción (los navegadores no dejan sonar antes).
+import { Music } from './music';
 
 export class GameAudio {
   private ctx: AudioContext | null = null;
@@ -12,6 +13,10 @@ export class GameAudio {
   private skidF!: BiquadFilterNode;
   private noiseBuf!: AudioBuffer;
   muted = false;
+  /** Música (existe cuando ya hay contexto de audio). */
+  music: Music | null = null;
+  private wantMusic: 'menu' | 'race' | 'none' = 'none';
+  musicOn = true;
 
   constructor(private enabled: boolean) {}
 
@@ -30,6 +35,9 @@ export class GameAudio {
     this.master = ctx.createGain();
     this.master.gain.value = 0.55;
     this.master.connect(ctx.destination);
+    this.music = new Music(ctx, ctx.destination);
+    this.music.enabled = this.musicOn;
+    this.music.play(this.wantMusic);
     // Ruido blanco reutilizable.
     this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
@@ -207,6 +215,17 @@ export class GameAudio {
   explosion(vol = 1, big = false): void {
     this.noise(big ? 0.9 : 0.5, 900, 50, (big ? 0.45 : 0.3) * vol, 'lowpass');
     this.tone(90, 0.4, 'sine', 0.25 * vol, 0, 35);
+  }
+
+  /** Cambia la música (se recuerda aunque el audio aún no esté desbloqueado). */
+  playMusic(t: 'menu' | 'race' | 'none'): void {
+    this.wantMusic = t;
+    this.music?.play(t);
+  }
+
+  setMusicOn(on: boolean): void {
+    this.musicOn = on;
+    if (this.music) this.music.enabled = on;
   }
 
   click(): void {

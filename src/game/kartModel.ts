@@ -39,6 +39,7 @@ export interface KartPose {
   finished: boolean;
   fireT: number;
   assisted: boolean;
+  showoff: boolean;
 }
 
 export class KartModel {
@@ -140,7 +141,7 @@ export class KartModel {
     if (this.bubble.visible) this.bubble.scale.setScalar(1 + Math.sin(this.t * 6) * 0.04);
     // Parpadeo mientras dura la invulnerabilidad tras un golpe.
     r.visible = !(k.invulnT > 0 && k.hitT <= 0 && k.fireT <= 0 && Math.floor(k.blinkT * 14) % 2 === 1);
-    this.cheer += ((k.finished ? 1 : 0) - this.cheer) * Math.min(1, dt * 3);
+    this.cheer += ((k.finished || k.showoff ? 1 : 0) - this.cheer) * Math.min(1, dt * 3);
     if (k.assisted && !this.star) {
       const shape = new THREE.Shape();
       for (let i = 0; i < 10; i++) {

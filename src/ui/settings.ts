@@ -106,6 +106,9 @@ export function openSettings(d: SettingsDeps): () => void {
     card.append(tog(s.smartSteer, 'Dirección asistida', 'Evita chocar y salirse. Una estrella brilla detrás del kart.', (v) => (s.smartSteer = v)));
     card.append(tog(s.autoPower, 'Poder automático', 'Usa el poder del peluche cuando conviene.', (v) => (s.autoPower = v)));
     card.append(tog(s.voice, 'Voz', 'Dice "¡Tres, dos, uno, ya!" y avisa la última vuelta.', (v) => (s.voice = v)));
+    card.append(h('Sonido'));
+    card.append(tog(s.music, 'Música', 'Música alegre en los menús y en la carrera.', (v) => (s.music = v)));
+    card.append(tog(s.sfx, 'Efectos', 'Motor, turbos, poderes y golpes.', (v) => (s.sfx = v)));
 
     card.append(h('Volante en el teléfono'));
     card.append(opt<SteerMode>(s.steerMode, [['botones', 'Botones ◀ ▶'], ['giro', 'Giroscopio']], (v) => {

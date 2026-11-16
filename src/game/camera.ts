@@ -112,3 +112,34 @@ export function topCam(cam: THREE.PerspectiveCamera, track: Track): void {
     cam.updateProjectionMatrix();
   }
 }
+
+/** Título: el peluche elegido en primer plano, girando sobre sí mismo. */
+export function showroomCam(cam: THREE.PerspectiveCamera, k: Kart, t: number): void {
+  const s = k.track.samples[k.idx];
+  const fx = s.tx;
+  const fz = s.tz;
+  const rx = -fz;
+  const rz = fx;
+  const sway = Math.sin(t * 0.25) * 0.8;
+  cam.position.set(k.pos.x + fx * 8.2 + rx * (2.2 + sway), k.pos.y + 3.0, k.pos.z + fz * 8.2 + rz * (2.2 + sway));
+  cam.lookAt(k.pos.x + rx * 0.3, k.pos.y + 1.2, k.pos.z + rz * 0.3);
+  if (cam.fov !== 50) {
+    cam.fov = 50;
+    cam.updateProjectionMatrix();
+  }
+}
+
+/** Podio: plano frontal con un leve vaivén. */
+export function podiumCam(cam: THREE.PerspectiveCamera, pos: THREE.Vector3, facing: THREE.Vector3, t: number): void {
+  const rx = -facing.z;
+  const rz = facing.x;
+  const sway = Math.sin(t * 0.4) * 2.5;
+  // En pantallas verticales hay que alejarse para que entren los tres puestos.
+  const d = 13 / Math.min(1, cam.aspect * 1.1);
+  cam.position.set(pos.x + facing.x * d + rx * sway, pos.y + 4.6 + (d - 13) * 0.15, pos.z + facing.z * d + rz * sway);
+  cam.lookAt(pos.x, pos.y + 3.4, pos.z);
+  if (cam.fov !== 50) {
+    cam.fov = 50;
+    cam.updateProjectionMatrix();
+  }
+}
