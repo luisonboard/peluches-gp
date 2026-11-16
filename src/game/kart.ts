@@ -6,6 +6,8 @@ import type { Track, Surface } from './track';
 import { newLoc } from './track';
 import type { CharacterDef } from './characters';
 import type { KartModel } from './kartModel';
+import type { KartState } from '../net/protocol';
+import { HIT_CODES } from '../net/protocol';
 
 export interface KartCtl {
   steer: number;
@@ -113,6 +115,15 @@ export class Kart {
   bubbleLift = 0;
   shrinkScale = 1;
   blinkT = 0;
+  // --- Red ---
+  /** Identificador común a todos los dispositivos (orden de la parrilla). */
+  slot = 0;
+  /** Nombre que se muestra (el que eligió su jugador). */
+  name = '';
+  /** Lo simula otro dispositivo: aquí solo se interpola lo que llega. */
+  remote = false;
+  private net: number[] | null = null;
+  private netAge = 0;
   private prevDrift = false;
   private hopDrift = false;
   private bumpCooldown = 0;
@@ -391,6 +402,77 @@ export class Kart {
     if ((fwdDot < -0.3 && this.speed > 3) || (fwdDot > 0.3 && this.speed < -3)) this.wrongWayT += dt;
     else this.wrongWayT = Math.max(0, this.wrongWayT - dt * 2);
 
+    this.syncModel(dt);
+  }
+
+  /** Estado compacto para enviarlo por la red. */
+  toState(): KartState {
+    const r = (v: number, d = 100): number => Math.round(v * d) / d;
+    return [
+      this.slot, r(this.pos.x), r(this.pos.y), r(this.pos.z), r(this.heading, 1000), r(this.speed), r(this.steerS), this.drift, this.driftLevel,
+      this.boostT > 0 ? 1 : 0, this.lap, this.idx, r(this.f), HIT_CODES.indexOf(this.hitKind), r(this.hitT), r(this.hitDur), r(this.shrinkT),
+      r(this.fireT), r(this.invulnT), r(this.vy), r(this.power),
+    ];
+  }
+
+  /** Recibe el estado de un kart remoto. */
+  applyState(st: KartState): void {
+    if (!this.net) {
+      this.pos.set(st[1], st[2], st[3]);
+      this.heading = st[4];
+    }
+    this.net = st;
+    this.netAge = 0;
+    this.speed = st[5];
+    this.steerS = st[6];
+    this.drift = st[7];
+    this.driftLevel = st[8];
+    this.boostT = st[9] ? 0.2 : 0;
+    this.lap = st[10];
+    this.idx = st[11];
+    this.f = st[12];
+    this.hitKind = HIT_CODES[st[13]] ?? '';
+    this.hitT = st[14];
+    this.hitDur = st[15] || 1;
+    this.shrinkT = st[16];
+    this.fireT = st[17];
+    this.invulnT = st[18];
+    this.vy = st[19];
+    this.power = st[20];
+    this.progress = this.lap * this.track.N + this.idx + this.f;
+  }
+
+  /** Avanza un kart remoto: predice con la última velocidad conocida y suaviza hacia ella. */
+  netUpdate(dt: number): void {
+    const st = this.net;
+    if (st) {
+      this.netAge += dt;
+      const ex = Math.min(this.netAge, 0.3);
+      const vx = Math.sin(st[4]) * st[5];
+      const vz = Math.cos(st[4]) * st[5];
+      const tx = st[1] + vx * ex;
+      const tz = st[3] + vz * ex;
+      const ty = st[2] + st[19] * ex;
+      const far = Math.hypot(tx - this.pos.x, tz - this.pos.z) > 10;
+      const k = far ? 1 : 1 - Math.exp(-14 * dt);
+      this.pos.x += (tx - this.pos.x) * k;
+      this.pos.z += (tz - this.pos.z) * k;
+      this.pos.y += (ty - this.pos.y) * k;
+      this.vel.set(vx, 0, vz);
+      this.heading = wrapAngle(this.heading + wrapAngle(st[4] - this.heading) * k);
+      // Los temporizadores siguen corriendo entre mensajes.
+      if (this.hitT > 0) this.hitT -= dt;
+      if (this.hitT <= 0) this.hitKind = '';
+      if (this.shrinkT > 0) this.shrinkT -= dt;
+      if (this.fireT > 0) this.fireT -= dt;
+      if (this.invulnT > 0) this.invulnT -= dt;
+    }
+    const L = this.track.locate(this.pos.x, this.pos.z, this.idx, this.loc);
+    this.groundY = L.y;
+    this.grounded = this.pos.y <= L.y + 0.15;
+    this.lat = L.lat;
+    this.slope = L.slope;
+    this.surface = L.surface;
     this.syncModel(dt);
   }
 

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { bus, type ItemId } from '../core/events';
+import type { Msg } from '../net/protocol';
 import type { Rng } from '../core/rng';
 import type { Track } from './track';
 import { newLoc } from './track';
@@ -27,6 +28,7 @@ interface Box {
   phase: number;
 }
 interface Ball {
+  id: string;
   on: boolean;
   x: number;
   y: number;
@@ -40,6 +42,7 @@ interface Ball {
   ground: number;
 }
 interface Gum {
+  id: string;
   on: boolean;
   x: number;
   y: number;
@@ -48,6 +51,7 @@ interface Gum {
   owner: number;
 }
 interface Bubble {
+  id: string;
   on: boolean;
   x: number;
   y: number;
@@ -60,6 +64,7 @@ interface Bubble {
   target: Kart | null;
 }
 interface Missile {
+  id: string;
   on: boolean;
   /** Progreso absoluto (vueltas × N + índice). */
   prog: number;
@@ -124,9 +129,10 @@ export class Arena {
     this.buildPools();
     bus.on('kart:land', ({ kart }) => {
       const k = this.karts[kart];
-      if (k?.stompPending) {
+      if (k?.stompPending && !k.remote) {
         k.stompPending = false;
         this.quake(k);
+        this.net?.({ t: 'quake', s: k.slot, x: k.pos.x, y: k.groundY, z: k.pos.z });
       }
     });
   }
@@ -169,7 +175,7 @@ export class Arena {
     const ballMat = new THREE.MeshStandardMaterial({ map: this.tex.ball, roughness: 0.3 });
     const ballGeo = new THREE.SphereGeometry(0.75, 20, 14);
     for (let i = 0; i < 10; i++) {
-      this.balls.push({ on: false, x: 0, y: 0, z: 0, vx: 0, vz: 0, idx: 0, t: 0, owner: -1, bounces: 0, ground: 0 });
+      this.balls.push({ id: '', on: false, x: 0, y: 0, z: 0, vx: 0, vz: 0, idx: 0, t: 0, owner: -1, bounces: 0, ground: 0 });
       const m = new THREE.Mesh(ballGeo, ballMat);
       m.castShadow = true;
       m.visible = false;
@@ -186,7 +192,7 @@ export class Arena {
     gumGeo.computeVertexNormals();
     const gumMat = new THREE.MeshStandardMaterial({ color: 0xff7ab8, roughness: 0.25 });
     for (let i = 0; i < 12; i++) {
-      this.gums.push({ on: false, x: 0, y: 0, z: 0, t: 0, owner: -1 });
+      this.gums.push({ id: '', on: false, x: 0, y: 0, z: 0, t: 0, owner: -1 });
       const m = new THREE.Mesh(gumGeo, gumMat);
       m.visible = false;
       m.receiveShadow = true;
@@ -196,7 +202,7 @@ export class Arena {
     const bubGeo = new THREE.SphereGeometry(1.1, 24, 16);
     const bubMat = new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.05, transparent: true, opacity: 0.45, iridescence: 1, iridescenceIOR: 1.6, depthWrite: false });
     for (let i = 0; i < 6; i++) {
-      this.bubbles.push({ on: false, x: 0, y: 0, z: 0, vx: 0, vz: 0, idx: 0, t: 0, owner: -1, target: null });
+      this.bubbles.push({ id: '', on: false, x: 0, y: 0, z: 0, vx: 0, vz: 0, idx: 0, t: 0, owner: -1, target: null });
       const m = new THREE.Mesh(bubGeo, bubMat);
       m.visible = false;
       this.bubbleMeshes.push(m);
@@ -205,7 +211,7 @@ export class Arena {
     const red = new THREE.MeshStandardMaterial({ color: 0xd83a2a, roughness: 0.35 });
     const grey = new THREE.MeshStandardMaterial({ color: 0xc8d0d8, roughness: 0.3, metalness: 0.4 });
     for (let i = 0; i < 6; i++) {
-      this.missiles.push({ on: false, prog: 0, lat: 0, x: 0, y: 0, z: 0, t: 0, owner: -1, target: null });
+      this.missiles.push({ id: '', on: false, prog: 0, lat: 0, x: 0, y: 0, z: 0, t: 0, owner: -1, target: null });
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1.3, 14).rotateX(Math.PI / 2), red);
       const tail = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.4, 14).rotateX(-Math.PI / 2).translate(0, 0, -0.85), grey);
@@ -254,50 +260,136 @@ export class Arena {
     return r < turbo ? 'turbo' : r < turbo + chicle ? 'chicle' : 'pelota';
   }
 
+  /** Envía mensajes a los demás dispositivos (null = un solo jugador). */
+  net: ((m: Msg) => void) | null = null;
+  private seq = 0;
+
+  private bySlot(slot: number): Kart | null {
+    return this.karts.find((k) => k.slot === slot) ?? null;
+  }
+
+  private newId(k: Kart): string {
+    return `${k.slot}.${this.seq++}`;
+  }
+
   useItem(k: Kart): void {
-    if (!k.item || k.rouletteT > 0 || k.hitT > 0) return;
+    if (!k.item || k.rouletteT > 0 || k.hitT > 0 || k.remote) return;
     const item = k.item;
     k.item = null;
     const fx = Math.sin(k.heading);
     const fz = Math.cos(k.heading);
-    if (item === 'turbo') k.boost('mini', 1.4);
-    else if (item === 'pelota') {
+    const d =
+      item === 'pelota'
+        ? { x: k.pos.x + fx * 2.4, y: k.pos.y + 0.8, z: k.pos.z + fz * 2.4, vx: fx * 44 + k.vel.x * 0.3, vz: fz * 44 + k.vel.z * 0.3 }
+        : { x: k.pos.x - fx * 2.8, y: k.groundY, z: k.pos.z - fz * 2.8, vx: 0, vz: 0 };
+    const id = this.newId(k);
+    this.spawnItem(k, item, d, id);
+    bus.emit('item:use', { kart: k.index, item });
+    this.net?.({ t: 'use', s: k.slot, w: 'item', item, id, ...d, tg: [] });
+  }
+
+  private spawnItem(k: Kart, item: ItemId, d: { x: number; y: number; z: number; vx: number; vz: number }, id: string): void {
+    if (item === 'turbo') {
+      if (!k.remote) k.boost('mini', 1.4);
+    } else if (item === 'pelota') {
       const b = this.free(this.balls);
-      if (b) {
-        Object.assign(b, { on: true, x: k.pos.x + fx * 2.4, y: k.pos.y + 0.8, z: k.pos.z + fz * 2.4, vx: fx * 44 + k.vel.x * 0.3, vz: fz * 44 + k.vel.z * 0.3, idx: k.idx, t: 0, owner: k.index, bounces: 0, ground: k.pos.y });
-      }
+      if (b) Object.assign(b, { on: true, id, x: d.x, y: d.y, z: d.z, vx: d.vx, vz: d.vz, idx: k.idx, t: 0, owner: k.index, bounces: 0, ground: k.pos.y });
     } else {
       let g = this.free(this.gums);
       if (!g) g = this.gums.reduce((a, b) => (a.t > b.t ? a : b));
-      Object.assign(g, { on: true, x: k.pos.x - fx * 2.8, y: k.groundY, z: k.pos.z - fz * 2.8, t: 0, owner: k.index });
+      Object.assign(g, { on: true, id, x: d.x, y: d.y, z: d.z, t: 0, owner: k.index });
     }
-    bus.emit('item:use', { kart: k.index, item });
   }
 
   usePower(k: Kart): void {
-    if (k.power < 1 || k.hitT > 0 || k.finished) return;
+    if (k.power < 1 || k.hitT > 0 || k.finished || k.remote) return;
     k.power = 0;
+    const tg: number[] = [];
+    if (k.char.id === 'esponja' || k.char.id === 'robot') {
+      const a = this.kartAhead(k);
+      if (a && (k.char.id === 'robot' || (a.progress - k.progress) * this.track.step < 140)) tg.push(a.slot);
+    } else if (k.char.id === 'raton') {
+      for (const o of this.karts) if (o !== k && o.position < k.position && !o.finished) tg.push(o.slot);
+    }
+    const fx = Math.sin(k.heading);
+    const fz = Math.cos(k.heading);
+    const m: Msg = { t: 'use', s: k.slot, w: 'power', id: this.newId(k), x: k.pos.x, y: k.pos.y, z: k.pos.z, vx: fx, vz: fz, tg, prog: k.progress + 2.5, lat: k.lat };
+    this.runPower(k, m);
     bus.emit('power:use', { kart: k.index, power: k.char.id });
+    this.net?.(m);
+  }
+
+  /** Mensaje de otro dispositivo: alguien usó un objeto o su poder. */
+  applyNetUse(m: Extract<Msg, { t: 'use' }>): void {
+    const k = this.bySlot(m.s);
+    if (!k) return;
+    if (m.w === 'item' && m.item) {
+      this.spawnItem(k, m.item, m, m.id);
+      bus.emit('item:use', { kart: k.index, item: m.item });
+    } else {
+      this.runPower(k, m);
+      bus.emit('power:use', { kart: k.index, power: k.char.id });
+    }
+  }
+
+  private runPower(k: Kart, m: Extract<Msg, { t: 'use' }>): void {
+    const target = m.tg.length ? this.bySlot(m.tg[0]) : null;
     switch (k.char.id) {
       case 'perro':
-        return this.bark(k);
-      case 'esponja':
-        return this.launchBubble(k);
+        return this.bark(k, m.x, m.y, m.z);
+      case 'esponja': {
+        const b = this.free(this.bubbles);
+        if (b) Object.assign(b, { on: true, id: m.id, x: m.x + m.vx * 2.5, y: m.y + 1.3, z: m.z + m.vz * 2.5, vx: m.vx * 40, vz: m.vz * 40, idx: k.idx, t: 0, owner: k.index, target });
+        return;
+      }
       case 'raton':
-        return this.lightning(k);
+        return this.lightning(k, m.tg.map((s) => this.bySlot(s)).filter((o): o is Kart => !!o));
       case 'zorro':
-        k.fireT = 3.5;
-        k.invulnT = Math.max(k.invulnT, 3.5);
-        if (k.hitKind === 'stuck') k.hitT = 0;
+        if (!k.remote) {
+          k.fireT = 3.5;
+          k.invulnT = Math.max(k.invulnT, 3.5);
+          if (k.hitKind === 'stuck') k.hitT = 0;
+        }
         return;
       case 'dino':
-        k.grounded = false;
-        k.vy = 10;
-        k.stompPending = true;
+        if (!k.remote) {
+          k.grounded = false;
+          k.vy = 10;
+          k.stompPending = true;
+        }
         return;
-      case 'robot':
-        return this.launchMissile(k);
+      case 'robot': {
+        const ms = this.free(this.missiles);
+        if (ms) Object.assign(ms, { on: true, id: m.id, prog: m.prog ?? k.progress + 2.5, lat: m.lat ?? 0, x: m.x, y: m.y + 1, z: m.z, t: 0, owner: k.index, target });
+        return;
+      }
     }
+  }
+
+  /** Otro dispositivo dice que un proyectil ya golpeó: se quita aquí también. */
+  applyNetKill(id: string): void {
+    for (const arr of [this.balls, this.gums, this.bubbles, this.missiles] as { on: boolean; id: string; x: number; y: number; z: number }[][]) {
+      for (const o of arr) {
+        if (o.on && o.id === id) {
+          o.on = false;
+          if (arr === (this.missiles as unknown)) this.explode(o.x, o.y, o.z, true);
+        }
+      }
+    }
+  }
+
+  applyNetBox(i: number): void {
+    const b = this.boxes[i];
+    if (b) b.respawn = BOX_RESPAWN;
+  }
+
+  applyNetQuake(slot: number, x: number, y: number, z: number): void {
+    const k = this.bySlot(slot);
+    if (k) this.quake(k, x, y, z);
+  }
+
+  private kill(id: string): void {
+    this.net?.({ t: 'kill', id });
   }
 
   private kartAhead(k: Kart): Kart | null {
@@ -307,36 +399,27 @@ export class Arena {
     return null;
   }
 
+  /** Solo se golpea a los karts que simula este dispositivo; de los demás se encarga su dueño. */
   private hit(k: Kart, kind: Parameters<Kart['applyHit']>[0], by: number): boolean {
+    if (k.remote) return false;
     return k.applyHit(kind, by);
   }
 
-  private bark(k: Kart): void {
-    for (let i = 0; i < 3; i++) this.ring(k.pos.x, k.pos.y + 0.8 + i * 0.4, k.pos.z, 16, 0.55, i * 0.12, 0xffe9a8);
+  private bark(k: Kart, x: number, y: number, z: number): void {
+    for (let i = 0; i < 3; i++) this.ring(x, y + 0.8 + i * 0.4, z, 16, 0.55, i * 0.12, 0xffe9a8);
     for (const o of this.karts) {
       if (o === k) continue;
-      const d = Math.hypot(o.pos.x - k.pos.x, o.pos.z - k.pos.z);
-      if (d < 16 && Math.abs(o.pos.y - k.pos.y) < 4) this.hit(o, 'spin', k.index);
+      const d = Math.hypot(o.pos.x - x, o.pos.z - z);
+      if (d < 16 && Math.abs(o.pos.y - y) < 4) this.hit(o, 'spin', k.index);
     }
     // El ladrido también se lleva por delante pelotas y chicles cercanos.
-    for (const b of this.balls) if (b.on && Math.hypot(b.x - k.pos.x, b.z - k.pos.z) < 16) b.on = false;
-    for (const g of this.gums) if (g.on && Math.hypot(g.x - k.pos.x, g.z - k.pos.z) < 16) g.on = false;
+    for (const b of this.balls) if (b.on && Math.hypot(b.x - x, b.z - z) < 16) b.on = false;
+    for (const g of this.gums) if (g.on && Math.hypot(g.x - x, g.z - z) < 16) g.on = false;
   }
 
-  private launchBubble(k: Kart): void {
-    const b = this.free(this.bubbles);
-    if (!b) return;
-    const fx = Math.sin(k.heading);
-    const fz = Math.cos(k.heading);
-    const target = this.kartAhead(k);
-    const ok = target && (target.progress - k.progress) * this.track.step < 140 ? target : null;
-    Object.assign(b, { on: true, x: k.pos.x + fx * 2.5, y: k.pos.y + 1.3, z: k.pos.z + fz * 2.5, vx: fx * 40, vz: fz * 40, idx: k.idx, t: 0, owner: k.index, target: ok });
-  }
-
-  private lightning(k: Kart): void {
+  private lightning(k: Kart, targets: Kart[]): void {
     let n = 0;
-    for (const o of this.karts) {
-      if (o === k || o.position >= k.position || o.finished) continue;
+    for (const o of targets) {
       const b = this.bolts[n++];
       if (!b) break;
       b.on = true;
@@ -347,26 +430,20 @@ export class Arena {
     bus.emit('fx:lightning', { kart: k.index });
   }
 
-  private quake(k: Kart): void {
-    this.ring(k.pos.x, k.groundY + 0.3, k.pos.z, 18, 0.7, 0, 0xffc070);
-    this.ring(k.pos.x, k.groundY + 0.3, k.pos.z, 12, 0.5, 0.1, 0xffc070);
+  private quake(k: Kart, x = k.pos.x, y = k.groundY, z = k.pos.z): void {
+    this.ring(x, y + 0.3, z, 18, 0.7, 0, 0xffc070);
+    this.ring(x, y + 0.3, z, 12, 0.5, 0.1, 0xffc070);
     for (let i = 0; i < 30; i++) {
       const a = (i / 30) * Math.PI * 2;
-      this.dust.spawn(k.pos.x + Math.cos(a) * 2, k.groundY + 0.3, k.pos.z + Math.sin(a) * 2, Math.cos(a) * 14, 2 + Math.random() * 2, Math.sin(a) * 14, 0.8, 1, 2.6, 0xd9b98a, 0.6, 3, 2.5);
+      this.dust.spawn(x + Math.cos(a) * 2, y + 0.3, z + Math.sin(a) * 2, Math.cos(a) * 14, 2 + Math.random() * 2, Math.sin(a) * 14, 0.8, 1, 2.6, 0xd9b98a, 0.6, 3, 2.5);
     }
     for (const o of this.karts) {
       if (o === k) continue;
-      const d = Math.hypot(o.pos.x - k.pos.x, o.pos.z - k.pos.z);
-      if (d < 18 && Math.abs(o.pos.y - k.pos.y) < 4) this.hit(o, 'tumble', k.index);
+      const d = Math.hypot(o.pos.x - x, o.pos.z - z);
+      if (d < 18 && Math.abs(o.pos.y - y) < 4) this.hit(o, 'tumble', k.index);
     }
-    for (const g of this.gums) if (g.on && Math.hypot(g.x - k.pos.x, g.z - k.pos.z) < 25) g.on = false;
-    bus.emit('fx:quake', { kart: k.index, x: k.pos.x, y: k.pos.y, z: k.pos.z });
-  }
-
-  private launchMissile(k: Kart): void {
-    const m = this.free(this.missiles);
-    if (!m) return;
-    Object.assign(m, { on: true, prog: k.progress + 2.5, lat: k.lat, x: k.pos.x, y: k.pos.y + 1, z: k.pos.z, t: 0, owner: k.index, target: this.kartAhead(k) });
+    for (const g of this.gums) if (g.on && Math.hypot(g.x - x, g.z - z) < 25) g.on = false;
+    bus.emit('fx:quake', { kart: k.index, x, y, z });
   }
 
   private ring(x: number, y: number, z: number, maxR: number, dur: number, delay: number, color: number): void {
@@ -403,7 +480,8 @@ export class Arena {
     this.updateBoxes(dt, racing);
     if (racing) {
       for (const k of this.karts) {
-        // Barra de poder y ruleta.
+        // Barra de poder y ruleta (los remotos la traen en su estado).
+        if (k.remote) continue;
         if (!k.finished) {
           const before = k.power;
           k.power = Math.min(1, k.power + dt / POWER_FILL_SECONDS);
@@ -433,6 +511,7 @@ export class Arena {
       if (b.respawn > 0) b.respawn -= dt;
       if (racing && b.respawn <= 0) {
         for (const k of this.karts) {
+          if (k.remote) continue;
           if (Math.abs(k.pos.x - b.x) < 2.1 && Math.abs(k.pos.z - b.z) < 2.1 && Math.abs(k.pos.y - b.y) < 2.6) {
             b.respawn = BOX_RESPAWN;
             const before = k.power;
@@ -444,6 +523,7 @@ export class Arena {
               this.dust.spawn(b.x, b.y + 1.2, b.z, Math.cos(a) * 6, 4 + Math.random() * 4, Math.sin(a) * 6, 0.9, 0.5, 0.35, [0xe8423a, 0x2f7de0, 0x3fb24a, 0xffd23a, 0xf07ab0][j % 5], 1, 14, 1);
             }
             bus.emit('box:open', { kart: k.index, x: b.x, y: b.y, z: b.z });
+            this.net?.({ t: 'box', i });
             break;
           }
         }
@@ -511,7 +591,7 @@ export class Arena {
       b.y = b.ground + 0.75 + Math.abs(Math.sin(b.t * 7)) * 1.3;
       const k = this.kartNear(b.x, b.y, b.z, 1.9, b.owner, b.t < 0.5);
       if (k) {
-        this.hit(k, 'spin', b.owner);
+        if (this.hit(k, 'spin', b.owner)) this.kill(b.id);
         b.on = false;
         this.explode(b.x, b.y, b.z, false);
       } else if (b.t > 6 || b.bounces > 7) b.on = false;
@@ -528,7 +608,7 @@ export class Arena {
         g.t += dt;
         const k = this.kartNear(g.x, g.y + 0.8, g.z, 1.7, g.owner, g.t < 1);
         if (k && k.grounded) {
-          this.hit(k, 'stuck', g.owner);
+          if (this.hit(k, 'stuck', g.owner)) this.kill(g.id);
           g.on = false;
         } else if (g.t > 45) g.on = false;
       }
@@ -569,7 +649,7 @@ export class Arena {
       const k = this.kartNear(b.x, b.y, b.z, 2.2, b.owner, true);
       const offTrack = Math.abs(L.lat) > L.hw + tr.shoulder;
       if (k) {
-        this.hit(k, 'bubble', b.owner);
+        if (this.hit(k, 'bubble', b.owner)) this.kill(b.id);
         b.on = false;
       } else if (b.t > 6 || offTrack) {
         b.on = false;
@@ -598,7 +678,7 @@ export class Arena {
         const gap = t.progress - m.prog;
         m.lat += (t.lat - m.lat) * Math.min(1, dt * (gap < 25 ? 6 : 1.5));
         if (gap < 1.5 && Math.abs(t.lat - m.lat) < 3) {
-          this.hit(t, 'tumble', m.owner);
+          if (this.hit(t, 'tumble', m.owner)) this.kill(m.id);
           this.explode(t.pos.x, t.pos.y + 1, t.pos.z, true);
           m.on = false;
         }

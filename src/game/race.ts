@@ -44,6 +44,12 @@ export class Race {
   private readonly assisted: KartCtl = { ...NO_CTL };
   assist: AssistOpts = { autoAccel: false, smartSteer: false };
   autoPower = false;
+  /** false en los invitados: el anfitrión decide los puestos de llegada. */
+  authority = true;
+  /** Un kart de este dispositivo cruzó la meta (invitado: avisar al anfitrión). */
+  onLocalFinish: (k: Kart) => void = () => {};
+  /** El anfitrión asignó un puesto (para avisar a los invitados). */
+  onPlace: (k: Kart) => void = () => {};
 
   constructor(
     readonly karts: Kart[],
@@ -53,6 +59,8 @@ export class Race {
     public autoplay: boolean,
     private rng: Rng,
     readonly arena: Arena,
+    /** En red, la parrilla sigue el orden común (slot) en todos los dispositivos. */
+    private gridBySlot = false,
   ) {
     this.placeOnGrid();
     arena.reset(karts, () => this.order);
@@ -66,7 +74,7 @@ export class Race {
   placeOnGrid(): void {
     const tr = this.karts[0].track;
     this.karts.forEach((k, n) => {
-      const slot = GRID_SLOT_OF_KART[n] ?? n;
+      const slot = this.gridBySlot ? k.slot : GRID_SLOT_OF_KART[n] ?? n;
       const row = Math.floor(slot / 2);
       const col = slot % 2;
       const i = tr.N - 5 - row * 6;
@@ -89,7 +97,10 @@ export class Race {
   update(dt: number, playerCtl: KartCtl, cam: import('three').Camera): void {
     this.arena.update(dt, this.phase === 'racing' || this.phase === 'done', cam);
     if (this.phase === 'grid') {
-      for (const k of this.karts) k.update(dt, NO_CTL, false);
+      for (const k of this.karts) {
+        if (k.remote) k.netUpdate(dt);
+        else k.update(dt, NO_CTL, false);
+      }
       return;
     }
     if (this.phase === 'countdown') {
@@ -103,7 +114,10 @@ export class Race {
       const autoHold = this.assist.autoAccel && !this.autoplay && this.countdown < 0.75;
       if (pc.throttle > 0.5 || autoHold) this.player.startHold += dt;
       else this.player.startHold = 0;
-      for (const k of this.karts) k.update(dt, NO_CTL, false);
+      for (const k of this.karts) {
+        if (k.remote) k.netUpdate(dt);
+        else k.update(dt, NO_CTL, false);
+      }
       if (this.countdown <= 0) {
         this.phase = 'racing';
         bus.emit('race:go');
@@ -119,6 +133,10 @@ export class Race {
     this.ctx.gums = this.arena.activeGums;
     for (let n = 0; n < this.karts.length; n++) {
       const k = this.karts[n];
+      if (k.remote) {
+        k.netUpdate(dt);
+        continue;
+      }
       const useAi = !k.isPlayer || this.autoplay || k.finished;
       let ctl = useAi ? this.ais[n].drive(k, dt, true, this.ctx) : playerCtl;
       if (!useAi) {
@@ -139,15 +157,15 @@ export class Race {
     }
     this.collide();
     for (const k of this.karts) {
-      if (!k.finished && k.lap > this.laps) {
+      if (!k.finished && !k.remote && k.lap > this.laps) {
         k.finished = true;
         k.finishTime = this.time;
-        k.place = ++this.finished;
-        bus.emit('kart:finish', { kart: k.index, place: k.place, time: k.finishTime });
+        if (this.authority) this.assignPlace(k, this.time);
+        else this.onLocalFinish(k);
       }
     }
     this.order = [...this.karts].sort((a, b) => {
-      if (a.finished && b.finished) return a.place - b.place;
+      if (a.finished && b.finished) return (a.place || 99) - (b.place || 99) || a.finishTime - b.finishTime;
       if (a.finished !== b.finished) return a.finished ? -1 : 1;
       return b.progress - a.progress;
     });
@@ -167,6 +185,26 @@ export class Race {
       this.doneAt = this.time;
       bus.emit('race:done');
     }
+  }
+
+  /** Anfitrión: da el siguiente puesto libre (también a los invitados cuando avisan). */
+  assignPlace(k: Kart, time: number): void {
+    if (k.place) return;
+    k.finished = true;
+    k.finishTime = time;
+    k.place = ++this.finished;
+    bus.emit('kart:finish', { kart: k.index, place: k.place, time });
+    this.onPlace(k);
+  }
+
+  /** Invitado: el anfitrión comunicó el puesto de un kart. */
+  setPlace(k: Kart, place: number, time: number): void {
+    if (k.place) return;
+    k.finished = true;
+    k.finishTime = time;
+    k.place = place;
+    this.finished = Math.max(this.finished, place);
+    bus.emit('kart:finish', { kart: k.index, place, time });
   }
 
   private collide(): void {

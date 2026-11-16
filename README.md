@@ -53,6 +53,7 @@ volante, nombres de los peluches y prueba del mando.
 | `?seed=texto` | Semilla de lo procedural |
 | `?perfil=peque\|normal` | Aplica un perfil al cargar |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
+| `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
 | `?noaudio` | Sin audio |
 
 Errores en `window.__errors`; estado en `window.__game` (por ejemplo, `__game.TUNING` para ajustar la física en vivo).
@@ -113,6 +114,27 @@ Errores en `window.__errors`; estado en `window.__game` (por ejemplo, `__game.TU
 Comprobado con `?autostart&perfil=peque` y sin tocar nada: 3 vueltas, 0 choques contra las barreras, 0 % fuera del
 asfalto. Manteniendo la derecha o girando al azar: 0 choques. Giroscopio simulado: inclinar 15° = medio giro,
 30° = giro completo, hacia el lado correcto.
+
+**Hito 4 — multijugador en línea** (terminado):
+
+- "👫 Jugar con otros" en el título: **Crear sala** da un código de 4 letras (sin I ni O) y un QR con el enlace
+  `?sala=CÓDIGO`; los demás escriben el código o escanean el QR. Hasta 6 jugadores; la IA llena los puestos libres.
+- Sala de espera común: cada uno elige su peluche (no se repiten) y su nombre viaja con él; el anfitrión elige
+  vueltas y dificultad de la IA y pulsa ¡A correr!.
+- Conexión directa entre dispositivos con PeerJS 1.5.4 (WebRTC). El servidor público de PeerJS solo sirve para
+  encontrarse; necesita Internet. Topología en estrella: el anfitrión reenvía.
+- Cada dispositivo simula su kart (sin retraso al manejar) y envía su estado 20 veces por segundo; los demás karts se
+  predicen con su última velocidad y se suavizan. El anfitrión simula la IA y decide los puestos de llegada.
+- Objetos y poderes en red: quien los usa avisa a todos (con el objetivo ya elegido) y cada dispositivo decide los
+  golpes de sus propios karts; las cajas abiertas y los proyectiles que ya golpearon se comunican a los demás.
+- Latido cada segundo: si un invitado se va, la IA del anfitrión toma su kart donde quedó; si se va el anfitrión,
+  los invitados vuelven al menú con un aviso. Al terminar, el anfitrión lleva a todos de vuelta a la sala.
+- En línea, la pausa no detiene la carrera (los demás siguen corriendo).
+
+Comprobado con dos pestañas (anfitrión e invitado): sala con los dos jugadores, kart del invitado visto por el
+anfitrión a 1–2 m (interpolación a 30 m/s), IA del anfitrión vista por el invitado, poder del invitado recibido por
+el anfitrión, mismo orden de llegada en los dos, vuelta a la sala, desconexión del invitado (la IA toma su kart) y
+del anfitrión (aviso al invitado).
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

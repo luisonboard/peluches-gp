@@ -338,7 +338,7 @@ export class Hud {
     }
   }
 
-  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string, onFullscreen: (() => void) | null): void {
+  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string, onFullscreen: (() => void) | null, onOnline: () => void): void {
     const wrap = el('div');
     wrap.style.width = 'min(760px, 100%)';
     const logo = el('div', 'pgp-logo');
@@ -398,7 +398,10 @@ export class Hud {
     const gear = el('button', 'pgp-go', '⚙ Ajustes');
     gear.style.cssText = 'margin:0;background:#2f7de0;box-shadow:0 7px 0 #1d5aa8;font-size:20px;padding:12px 22px';
     gear.onclick = () => onSettings();
-    goRow.append(go, gear);
+    const online = el('button', 'pgp-go', '👫 Jugar con otros');
+    online.style.cssText = 'margin:0;background:#f07ab0;box-shadow:0 7px 0 #b84a80;font-size:20px;padding:12px 22px';
+    online.onclick = () => onOnline();
+    goRow.append(go, online, gear);
     if (onFullscreen) {
       const fs = el('button', 'pgp-go', '⛶');
       fs.title = 'Pantalla completa';
@@ -449,7 +452,7 @@ export class Hud {
     charRow.classList.add('focus');
   }
 
-  showPause(onResume: () => void, onRestart: () => void, onMenu: () => void, onSettings: () => void, onFullscreen: (() => void) | null): void {
+  showPause(onResume: () => void, onRestart: (() => void) | null, onMenu: () => void, onSettings: () => void, onFullscreen: (() => void) | null, menuLabel = 'Menú'): void {
     const card = el('div', 'pgp-card pgp-results');
     card.style.width = 'min(420px, 100%)';
     card.append(el('h2', '', 'Pausa'));
@@ -463,11 +466,13 @@ export class Hud {
       return b;
     };
     const a = mk('Seguir', '', onResume);
-    const b = mk('Empezar de nuevo', 'alt', onRestart);
+    const b = onRestart ? mk('Empezar de nuevo', 'alt', onRestart) : null;
     const d = mk('Ajustes', 'alt', onSettings);
-    const rows: [HTMLElement, () => void][] = [[a, onResume], [b, onRestart], [d, onSettings]];
+    const rows: [HTMLElement, () => void][] = [[a, onResume]];
+    if (b && onRestart) rows.push([b, onRestart]);
+    rows.push([d, onSettings]);
     if (onFullscreen) rows.push([mk('Pantalla completa', 'alt', onFullscreen), onFullscreen]);
-    rows.push([mk('Menú', 'alt', onMenu), onMenu]);
+    rows.push([mk(menuLabel, 'alt', onMenu), onMenu]);
     card.append(btns);
     this.openScreen(card, true);
     this.menuRows = rows.map(([e, fn]) => ({ el: e, ok: fn }));
@@ -475,7 +480,7 @@ export class Hud {
     this.menuInput([]);
   }
 
-  showResults(race: Race, onAgain: () => void, onMenu: () => void): void {
+  showResults(race: Race, onAgain: () => void, onMenu: () => void, againLabel = 'Otra carrera', menuLabel = 'Menú'): void {
     const card = el('div', 'pgp-card pgp-results');
     card.style.width = 'min(560px, 100%)';
     const p = race.player;
@@ -484,9 +489,9 @@ export class Hud {
     const table = el('table');
     card.append(table);
     const btns = el('div', 'btns');
-    const again = el('button', 'pgp-go', 'Otra carrera');
+    const again = el('button', 'pgp-go', againLabel);
     again.onclick = onAgain;
-    const menu = el('button', 'pgp-go alt', 'Menú');
+    const menu = el('button', 'pgp-go alt', menuLabel);
     menu.onclick = onMenu;
     btns.append(again, menu);
     card.append(btns);
@@ -508,7 +513,7 @@ export class Hud {
     this.resultsTable.innerHTML = race.order
       .map(
         (k) => `<tr class="${k.isPlayer ? 'me' : ''}"><td>${k.finished ? ordinal(k.place) : '…'}</td>
-        <td><span class="dot" style="background:${cssColor(k.char.kart)}"></span>${displayName(k.char)}${k.isPlayer ? ' (tú)' : ''}</td>
+        <td><span class="dot" style="background:${cssColor(k.char.kart)}"></span>${k.name}${k.isPlayer ? ' (tú)' : ''}</td>
         <td style="text-align:right">${k.finished ? fmtTime(k.finishTime) : 'en carrera'}</td></tr>`,
       )
       .join('');

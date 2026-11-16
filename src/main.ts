@@ -30,6 +30,11 @@ import { TouchControls, isTouchDevice } from './input/touch';
 import { Voice } from './audio/voice';
 import { openSettings } from './ui/settings';
 import { toggleFullscreen, fullscreenSupported } from './ui/fullscreen';
+import { Session } from './net/session';
+import type { RosterEntry } from './net/protocol';
+import { showOnlineMenu, showLobby, closeLobbyScreen } from './ui/lobby';
+import { normalizeCode } from './net/net';
+import { NO_CTL } from './game/kart';
 
 installErrorHooks();
 
@@ -126,18 +131,41 @@ function storeSetup(): void {
   saveSettings(settings);
 }
 
-function buildRace(): void {
+/** `net`: orden de carrera recibido en una partida en línea (el propio kart va primero en la lista local). */
+function buildRace(net?: RosterEntry[]): void {
   for (const k of karts) scene.remove(k.model.root);
-  const others = CHARACTERS.filter((_, i) => i !== setup.charIndex);
-  const roster = [CHARACTERS[setup.charIndex], ...others];
   const aiRng = rng.fork(`ia-${Date.now()}`);
-  karts = roster.map((c, i) => {
+  const makeKart = (i: number, c: (typeof CHARACTERS)[number], isPlayer: boolean): Kart => {
     const model = new KartModel(c, quality.shadowMap > 0 ? null : tex.blob, quality.shadowMap > 0, plushMats);
     scene.add(model.root);
-    return new Kart(i, c, i === 0, model, track);
-  });
+    return new Kart(i, c, isPlayer, model, track);
+  };
+  if (net) {
+    const mine = net.find((e) => e.owner === session.ownerId)!;
+    const ordered = [mine, ...net.filter((e) => e !== mine)];
+    karts = ordered.map((e, i) => {
+      const c = CHARACTERS.find((x) => x.id === e.char)!;
+      const k = makeKart(i, c, e === mine);
+      k.slot = e.slot;
+      k.name = e.name || displayName(c);
+      // El anfitrión simula su kart y la IA; cada invitado solo el suyo.
+      k.remote = e !== mine && !(session.isHost && e.owner === 'ai');
+      return k;
+    });
+  } else {
+    const others = CHARACTERS.filter((_, i) => i !== setup.charIndex);
+    const roster = [CHARACTERS[setup.charIndex], ...others];
+    karts = roster.map((c, i) => {
+      const k = makeKart(i, c, i === 0);
+      k.slot = i;
+      k.name = displayName(c);
+      return k;
+    });
+  }
   const ais = karts.map((_, i) => new AIDriver(aiRng.fork(`p${i}`), i === 0 ? 0.8 : setup.cpu.driftSkill));
-  race = new Race(karts, ais, setup.laps, setup.cpu, params.autoplay, aiRng.fork('carrera'), arena);
+  race = new Race(karts, ais, setup.laps, setup.cpu, net ? false : params.autoplay, aiRng.fork('carrera'), arena, !!net);
+  if (net) session.attach(race, karts);
+  else arena.net = null;
   applySettings();
   chase.reset();
 }
@@ -187,6 +215,7 @@ function showTitle(): void {
     () => showSettings(showTitle),
     titleStatus(),
     fullscreenSupported() ? toggleFullscreen : null,
+    () => openOnline(),
   );
 }
 
@@ -204,6 +233,13 @@ function startRace(): void {
   }
   hud.closeScreen();
   buildRace();
+  beginRace();
+}
+
+/** Parte común de empezar: pantallas, fps, botones táctiles y cuenta atrás. */
+function beginRace(): void {
+  hud.closeScreen();
+  closeLobbyScreen();
   mode = 'race';
   loop.fpsLimit = params.fps ?? 60;
   dynRes.targetMs = 1000 / (loop.fpsLimit || 60);
@@ -224,11 +260,99 @@ function pause(): void {
     mode = 'race';
     touch.show(touchOn);
   };
-  hud.showPause(resume, startRace, showTitle, () => showSettings(pause2), fullscreenSupported() ? toggleFullscreen : null);
+  if (session.active) hud.showPause(resume, null, leaveOnline, () => showSettings(pause2), fullscreenSupported() ? toggleFullscreen : null, 'Salir de la sala');
+  else hud.showPause(resume, startRace, showTitle, () => showSettings(pause2), fullscreenSupported() ? toggleFullscreen : null);
   function pause2(): void {
     mode = 'race';
     pause();
   }
+}
+
+// ---------------- En línea ----------------
+
+const session: Session = new Session(
+  {
+    onLobby: () => {
+      if (mode === 'title' && !closeSettings) renderLobby();
+    },
+    onStart: (roster, laps, cpu) => {
+      setup.laps = laps;
+      setup.cpu = CPU_LEVELS.find((l) => l.id === cpu) ?? CPU_LEVELS[0];
+      audio.unlock();
+      buildRace(roster);
+      beginRace();
+    },
+    onMenu: () => {
+      // El anfitrión volvió a la sala: todos a la sala de espera.
+      hud.closeScreen();
+      toTitleQuiet();
+      renderLobby();
+    },
+    onError: (text) => {
+      hud.closeScreen();
+      toTitleQuiet();
+      openOnline(text);
+    },
+    onNotice: (text) => hud.toast(text, '#ffe9a8'),
+  },
+  arena,
+);
+
+/** Vuelve al estado de título sin dibujar su menú (lo tapa la sala). */
+function toTitleQuiet(): void {
+  mode = 'title';
+  loop.fpsLimit = params.fps ?? 30;
+  hud.setRaceVisible(false);
+  touch.show(false);
+  if (!race || race.phase !== 'grid') buildRace();
+}
+
+function myChar(): (typeof CHARACTERS)[number] {
+  return CHARACTERS[setup.charIndex];
+}
+
+function openOnline(error?: string, code?: string): void {
+  hud.closeScreen();
+  showOnlineMenu({
+    error,
+    code,
+    onCreate: () => {
+      showOnlineMenu({ busy: 'Creando la sala…', onCreate: () => {}, onJoin: () => {}, onBack: () => openOnline() });
+      session.create(myChar().id, displayName(myChar()), setup.laps, setup.cpu.id).catch((e: Error) => openOnline(e.message));
+    },
+    onJoin: (raw) => {
+      const c = normalizeCode(raw);
+      if (c.length !== 4) return openOnline('El código tiene 4 letras.', c);
+      showOnlineMenu({ code: c, busy: 'Buscando la sala…', onCreate: () => {}, onJoin: () => {}, onBack: () => openOnline() });
+      session.join(c, myChar().id, displayName(myChar())).catch((e: Error) => openOnline(e.message, c));
+    },
+    onBack: () => {
+      closeLobbyScreen();
+      showTitle();
+    },
+  });
+}
+
+function renderLobby(): void {
+  hud.closeScreen();
+  showLobby(session, {
+    pick: (c) => {
+      const ch = CHARACTERS.find((x) => x.id === c)!;
+      setup.charIndex = CHARACTERS.indexOf(ch);
+      storeSetup();
+      session.pick(c, displayName(ch));
+    },
+    options: (laps, cpu) => session.setOptions(laps, cpu),
+    start: () => session.start(),
+    leave: leaveOnline,
+  });
+}
+
+function leaveOnline(): void {
+  session.leave();
+  closeLobbyScreen();
+  hud.closeScreen();
+  showTitle();
 }
 
 // ---------------- Eventos → audio, cámara, efectos ----------------
@@ -321,7 +445,7 @@ bus.on('power:ready', ({ kart }) => {
 bus.on('power:use', ({ kart, power }) => {
   const v = volKart(kart);
   if (kart === 0) hud.flash(POWER_SAY[power], true, '#ffd23a');
-  else if (v > 0.3) hud.toast(`${displayName(karts[kart].char)}: ${karts[kart].char.power}`, '#ffe9a8');
+  else if (v > 0.3) hud.toast(`${karts[kart].name}: ${karts[kart].char.power}`, '#ffe9a8');
   if (power === 'perro') {
     audio.bark(v);
     if (kart === 0 || v > 0.6) chase.shake(0.2);
@@ -355,7 +479,7 @@ bus.on('kart:hit', ({ kart, kind, by }) => {
     chase.shake(0.35);
     const who = by >= 0 && by !== 0 ? karts[by] : null;
     const what = { spin: '¡Uy!', stuck: '¡Chicle!', bubble: '¡Atrapado!', shrink: '¡Pequeñito!', tumble: '¡Bum!' }[kind];
-    hud.toast(who ? `${what} ${displayName(who.char)} te dio` : what, '#ffb0b0');
+    hud.toast(who ? `${what} ${who.name} te dio` : what, '#ffb0b0');
   }
 });
 
@@ -465,15 +589,24 @@ function frame(dt: number): void {
   if (mode === 'title') {
     titleT += dt;
     race.update(dt, ctl, camera);
-  } else if (mode === 'race' || mode === 'results') {
-    for (let s = 0; s < params.speed; s++) race.update(dt, ctl, camera);
+  } else if (mode === 'race' || mode === 'results' || (mode === 'paused' && session.active)) {
+    // En línea la carrera no se detiene en la pausa (los demás siguen corriendo).
+    const c = mode === 'paused' ? NO_CTL : ctl;
+    for (let s = 0; s < params.speed; s++) race.update(dt, c, camera);
+    if (session.active) session.tick(dt);
     for (const k of karts) kartFx(k, dt);
     if (race.phase === 'done') {
-      if (resultsShownAt < 0 && race.time - race.doneAt > 2.5) {
+      if (resultsShownAt < 0 && race.time - race.doneAt > 2.5 && mode !== 'paused' && (!session.active || karts[0].place > 0)) {
         resultsShownAt = race.time;
         mode = 'results';
         touch.show(false);
-        hud.showResults(race, startRace, showTitle);
+        if (session.active && session.isHost) hud.showResults(race, () => {
+            hud.closeScreen();
+            toTitleQuiet();
+            session.backToLobby();
+          }, leaveOnline, 'Volver a la sala', 'Cerrar sala');
+        else if (session.active) hud.showResults(race, () => {}, leaveOnline, 'Esperando al anfitrión…', 'Salir');
+        else hud.showResults(race, startRace, showTitle);
       } else if (resultsShownAt >= 0) hud.refreshResults(race);
     }
   }
@@ -512,6 +645,14 @@ function frame(dt: number): void {
 
 showTitle();
 if (params.autostart) startRace();
+const salaParam = new URLSearchParams(location.search).get('sala');
+if (salaParam && !params.autostart) {
+  // Enlace o QR de una sala: se intenta entrar directamente.
+  const c = normalizeCode(salaParam);
+  openOnline(undefined, c);
+  showOnlineMenu({ code: c, busy: 'Buscando la sala…', onCreate: () => {}, onJoin: () => {}, onBack: () => openOnline() });
+  session.join(c, myChar().id, displayName(myChar())).catch((e: Error) => openOnline(e.message, c));
+}
 loop.start();
 
 window.__game = {
@@ -529,6 +670,7 @@ window.__game = {
   renderer,
   scene,
   bus,
+  session,
   settings,
   gyro,
   touch,
