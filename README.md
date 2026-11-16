@@ -19,7 +19,7 @@ npm run typecheck
   carpeta `dist`. Cada `git push` a `main` publica. `public/` trae el manifiesto, los íconos, el service worker
   (`sw.js`, sin conexión) y `_headers`.
 - **Relevo de salas (Worker de Cloudflare con Durable Object):** `cd relay && npm install && npx wrangler login`
-  (una vez) y `npm run deploy`. La dirección del Worker va en `.env.production` (`VITE_RELAY_URL`); el juego usa el
+  (una vez) y `npm run deploy`. La dirección del Worker (https://peluches-gp-relay.luisonboard.workers.dev) va en `.env.production` (`VITE_RELAY_URL`); el juego usa el
   relevo del mismo servidor si existe (desarrollo) y si no, el Worker. Si ninguno responde, conexión directa (PeerJS).
 - Íconos: `icons-src/*.svg`, exportados a `public/icon-*.png`.
 
