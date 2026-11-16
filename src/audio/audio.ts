@@ -145,6 +145,70 @@ export class GameAudio {
     const notes = place <= 3 ? [523, 659, 784, 1046, 784, 1046] : [392, 349, 330, 262];
     notes.forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.16, i * 0.14));
   }
+  // --- Objetos y poderes (vol = 0..1 según la distancia al jugador) ---
+  box(): void {
+    [880, 1175, 1568].forEach((f, i) => this.tone(f, 0.09, 'triangle', 0.1, i * 0.04));
+  }
+  roulette(): void {
+    this.tone(1400, 0.03, 'square', 0.04);
+  }
+  itemGet(): void {
+    [784, 1046].forEach((f, i) => this.tone(f, 0.12, 'triangle', 0.13, i * 0.08));
+  }
+  powerReady(): void {
+    [1046, 1318, 1568, 2093].forEach((f, i) => this.tone(f, 0.12, 'sine', 0.1, i * 0.06));
+  }
+  throwBall(vol = 1): void {
+    this.tone(200, 0.25, 'sine', 0.22 * vol, 0, 700);
+  }
+  gum(vol = 1): void {
+    this.noise(0.18, 600, 150, 0.2 * vol, 'lowpass');
+    this.tone(160, 0.2, 'sine', 0.12 * vol, 0.02, 90);
+  }
+  hit(vol = 1): void {
+    this.tone(520, 0.5, 'sine', 0.16 * vol, 0, 140);
+    this.noise(0.15, 1200, 300, 0.15 * vol, 'lowpass');
+  }
+  stuck(vol = 1): void {
+    this.tone(180, 0.4, 'triangle', 0.15 * vol, 0, 110);
+  }
+  bark(vol = 1): void {
+    for (const d of [0, 0.2]) {
+      this.tone(520, 0.13, 'sawtooth', 0.2 * vol, d, 260);
+      this.noise(0.1, 1500, 700, 0.12 * vol);
+    }
+  }
+  bubble(vol = 1): void {
+    this.tone(260, 0.35, 'sine', 0.22 * vol, 0, 980);
+    this.tone(400, 0.25, 'sine', 0.1 * vol, 0.12, 1300);
+  }
+  pop(vol = 1): void {
+    this.noise(0.08, 3000, 1200, 0.2 * vol, 'highpass');
+  }
+  thunder(): void {
+    this.noise(0.12, 6000, 2500, 0.35, 'highpass');
+    this.noise(1.4, 500, 60, 0.4, 'lowpass');
+  }
+  fire(vol = 1): void {
+    this.noise(1.0, 300, 2600, 0.3 * vol);
+    this.tone(150, 0.9, 'sawtooth', 0.07 * vol, 0, 420);
+  }
+  jump(vol = 1): void {
+    this.tone(180, 0.35, 'square', 0.1 * vol, 0, 520);
+  }
+  quake(vol = 1): void {
+    this.tone(70, 0.9, 'sine', 0.4 * vol, 0, 30);
+    this.noise(0.8, 300, 60, 0.35 * vol, 'lowpass');
+  }
+  missile(vol = 1): void {
+    this.noise(0.6, 800, 2500, 0.2 * vol);
+    [1200, 1200, 1200].forEach((f, i) => this.tone(f, 0.05, 'square', 0.06 * vol, 0.15 + i * 0.12));
+  }
+  explosion(vol = 1, big = false): void {
+    this.noise(big ? 0.9 : 0.5, 900, 50, (big ? 0.45 : 0.3) * vol, 'lowpass');
+    this.tone(90, 0.4, 'sine', 0.25 * vol, 0, 35);
+  }
+
   click(): void {
     this.tone(880, 0.05, 'triangle', 0.08);
   }

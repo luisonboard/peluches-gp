@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { CharacterDef } from './characters';
+import { buildPlush, type PlushMaterials, type PlushRig } from './plush';
 
 const geoCache = new Map<string, THREE.BufferGeometry>();
 const matCache = new Map<string, THREE.Material>();
@@ -16,8 +17,6 @@ function mat(key: string, make: () => THREE.Material): THREE.Material {
   return m;
 }
 const plastic = (c: number): THREE.Material => mat(`p${c}`, () => new THREE.MeshStandardMaterial({ color: c, roughness: 0.38, metalness: 0.05 }));
-const plush = (c: number): THREE.Material =>
-  mat(`f${c}`, () => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.9, sheen: 1, sheenRoughness: 0.5, sheenColor: new THREE.Color(c).lerp(new THREE.Color(0xffffff), 0.5) }));
 
 export interface KartPose {
   heading: number;
@@ -30,6 +29,15 @@ export interface KartPose {
   landSquash: number;
   pos: THREE.Vector3;
   groundY: number;
+  spinVisual: number;
+  bubbleLift: number;
+  shrinkScale: number;
+  invulnT: number;
+  hitT: number;
+  hitKind: string;
+  blinkT: number;
+  finished: boolean;
+  fireT: number;
 }
 
 export class KartModel {
@@ -39,12 +47,18 @@ export class KartModel {
   private steerPivots: THREE.Object3D[] = [];
   private blob: THREE.Mesh | null = null;
   private wheelRot = 0;
+  private readonly plush: PlushRig;
+  private readonly bubble: THREE.Mesh;
+  private readonly lift = new THREE.Group();
+  private cheer = 0;
+  private t = Math.random() * 10;
   private pitch = 0;
   private roll = 0;
 
-  constructor(char: CharacterDef, blobTex: THREE.Texture | null, castShadow: boolean) {
+  constructor(char: CharacterDef, blobTex: THREE.Texture | null, castShadow: boolean, plushMats: PlushMaterials) {
     const r = this.root;
-    r.add(this.body);
+    r.add(this.lift);
+    this.lift.add(this.body);
     const b = this.body;
     // Chasis.
     const chassis = new THREE.Mesh(geo('chassis', () => new RoundedBoxGeometry(1.6, 0.5, 2.5, 3, 0.2)), plastic(char.kart));
@@ -84,7 +98,19 @@ export class KartModel {
       this.wheels.push(spin);
       if (front) this.steerPivots.push(pivot);
     }
-    b.add(this.buildDriver(char));
+    this.plush = buildPlush(char, plushMats);
+    const driver = new THREE.Group();
+    driver.position.set(0, 0.9, -0.35);
+    driver.add(this.plush.group);
+    b.add(driver);
+    // Burbuja que atrapa (poder de Esponjo).
+    this.bubble = new THREE.Mesh(
+      geo('bubble', () => new THREE.SphereGeometry(2.1, 32, 20)),
+      mat('bubble', () => new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.05, transparent: true, opacity: 0.32, iridescence: 1, iridescenceIOR: 1.6, depthWrite: false })),
+    );
+    this.bubble.position.y = 1.1;
+    this.bubble.visible = false;
+    this.lift.add(this.bubble);
     if (blobTex) {
       this.blob = new THREE.Mesh(
         geo('blob', () => new THREE.PlaneGeometry(2.6, 3.4).rotateX(-Math.PI / 2)),
@@ -94,88 +120,25 @@ export class KartModel {
       r.add(this.blob);
     }
     r.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh && o !== this.blob) {
+      if ((o as THREE.Mesh).isMesh && o !== this.blob && o !== this.bubble) {
         (o as THREE.Mesh).castShadow = castShadow;
       }
     });
   }
 
-  /** Piloto provisional: cuerpo y cabeza de peluche con rasgos básicos de cada especie. */
-  private buildDriver(c: CharacterDef): THREE.Group {
-    const d = new THREE.Group();
-    d.position.set(0, 0.9, -0.35);
-    const fur = plush(c.color);
-    const acc = plush(c.accent);
-    const sphere = geo('sph', () => new THREE.SphereGeometry(1, 24, 16));
-    const cone = geo('cone', () => new THREE.ConeGeometry(1, 1, 16));
-    const add = (g: THREE.BufferGeometry, m: THREE.Material, p: [number, number, number], s: [number, number, number], rot?: [number, number, number]): THREE.Mesh => {
-      const mesh = new THREE.Mesh(g, m);
-      mesh.position.set(...p);
-      mesh.scale.set(...s);
-      if (rot) mesh.rotation.set(...rot);
-      d.add(mesh);
-      return mesh;
-    };
-    add(sphere, fur, [0, 0.45, 0], [0.55, 0.6, 0.5]);
-    let headY = 1.3;
-    if (c.id === 'esponja' || c.id === 'robot') {
-      const box = geo(`head-${c.id}`, () => new RoundedBoxGeometry(1.15, 1.2, 0.75, 3, c.id === 'esponja' ? 0.18 : 0.1));
-      add(box, c.id === 'esponja' ? fur : plastic(c.color), [0, 1.35, 0], [1, 1, 1]);
-      headY = 1.35;
-      if (c.id === 'esponja') {
-        for (const [x, y] of [[-0.35, 1.7], [0.4, 1.05], [-0.25, 0.95], [0.42, 1.75]]) add(sphere, acc, [x, y, 0.37], [0.09, 0.09, 0.03]);
-      } else {
-        add(geo('ant', () => new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6)), plastic(0x9aa3ad), [0, 2.15, 0], [1, 1, 1]);
-        add(sphere, plastic(0xffd23a), [0, 2.42, 0], [0.12, 0.12, 0.12]);
-      }
-    } else {
-      add(sphere, fur, [0, headY, 0.05], [0.6, 0.55, 0.55]);
-    }
-    // Ojos.
-    const white = plastic(0xffffff);
-    const black = plastic(0x15151c);
-    const ez = c.id === 'esponja' || c.id === 'robot' ? 0.38 : 0.52;
-    for (const sx of [-0.2, 0.2]) {
-      add(sphere, white, [sx, headY + 0.1, ez], [0.15, 0.17, 0.08]);
-      add(sphere, black, [sx, headY + 0.1, ez + 0.06], [0.07, 0.09, 0.04]);
-    }
-    switch (c.id) {
-      case 'perro':
-        add(sphere, acc, [0, headY - 0.12, 0.5], [0.28, 0.2, 0.2]);
-        add(sphere, black, [0, headY - 0.04, 0.68], [0.08, 0.06, 0.05]);
-        for (const sx of [-1, 1]) add(cone, fur, [sx * 0.38, headY + 0.55, 0], [0.18, 0.5, 0.12], [0, 0, -sx * 0.25]);
-        break;
-      case 'raton':
-        for (const sx of [-1, 1]) {
-          add(cone, fur, [sx * 0.35, headY + 0.75, 0], [0.13, 0.8, 0.1], [0, 0, -sx * 0.3]);
-          add(cone, black, [sx * 0.47, headY + 1.08, 0], [0.07, 0.22, 0.06], [0, 0, -sx * 0.3]);
-          add(sphere, plastic(c.accent), [sx * 0.42, headY - 0.1, 0.38], [0.11, 0.11, 0.05]);
-        }
-        break;
-      case 'zorro':
-        for (const sx of [-1, 1]) add(cone, fur, [sx * 0.38, headY + 0.6, 0], [0.24, 0.6, 0.12], [0, 0, -sx * 0.35]);
-        for (let i = 0; i < 3; i++) add(cone, fur, [(i - 1) * 0.35, 0.5, -0.65], [0.16, 0.9, 0.16], [-1.1, 0, (i - 1) * 0.5]);
-        add(sphere, plastic(0x8fd0ff), [0, 0.85, 0.22], [0.45, 0.08, 0.35]);
-        break;
-      case 'dino':
-        add(sphere, acc, [0, headY - 0.1, 0.42], [0.35, 0.25, 0.25]);
-        add(cone, acc, [0, headY + 0.6, 0], [0.1, 0.25, 0.1]);
-        add(sphere, acc, [0, 0.4, 0.3], [0.38, 0.45, 0.3]);
-        break;
-      case 'esponja':
-        add(geo('shirt', () => new THREE.BoxGeometry(1.0, 0.25, 0.7)), plastic(0xf4f1ea), [0, 0.65, 0], [1, 1, 1]);
-        add(cone, plastic(0xd8302a), [0, 0.5, 0.38], [0.08, 0.3, 0.04], [Math.PI, 0, 0]);
-        break;
-      case 'robot':
-        break;
-    }
-    return d;
-  }
-
   update(k: KartPose, dt: number): void {
     const r = this.root;
+    this.t += dt;
     r.position.copy(k.pos);
-    r.rotation.y = k.heading - k.driftVisual;
+    r.rotation.y = k.heading - k.driftVisual + k.spinVisual;
+    r.scale.setScalar(k.shrinkScale);
+    this.lift.position.y = k.bubbleLift;
+    this.bubble.visible = k.bubbleLift > 0.05;
+    if (this.bubble.visible) this.bubble.scale.setScalar(1 + Math.sin(this.t * 6) * 0.04);
+    // Parpadeo mientras dura la invulnerabilidad tras un golpe.
+    r.visible = !(k.invulnT > 0 && k.hitT <= 0 && k.fireT <= 0 && Math.floor(k.blinkT * 14) % 2 === 1);
+    this.cheer += ((k.finished ? 1 : 0) - this.cheer) * Math.min(1, dt * 3);
+    this.plush.update({ steerS: k.steerS, speed: k.speed, t: this.t, cheer: this.cheer, hurt: k.hitT > 0 && k.hitKind !== 'stuck' ? 1 : 0 });
     const targetPitch = k.grounded ? -Math.atan(k.slope) : -Math.atan2(k.vy, Math.max(8, Math.abs(k.speed))) * 0.6;
     this.pitch += (targetPitch - this.pitch) * Math.min(1, dt * 10);
     const sp01 = Math.min(1, Math.abs(k.speed) / 30);
@@ -188,8 +151,8 @@ export class KartModel {
     for (const w of this.wheels) w.rotation.x = this.wheelRot;
     for (const p of this.steerPivots) p.rotation.y = -k.steerS * 0.42;
     if (this.blob) {
-      const h = Math.max(0, k.pos.y - k.groundY);
-      this.blob.position.y = -h + 0.08;
+      const h = Math.max(0, k.pos.y - k.groundY) + k.bubbleLift;
+      this.blob.position.y = (-h + 0.08) / Math.max(0.3, k.shrinkScale);
       this.blob.rotation.y = k.driftVisual;
       const s = Math.max(0.4, 1 - h * 0.12);
       this.blob.scale.set(s, 1, s);

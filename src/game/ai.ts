@@ -4,6 +4,14 @@ import type { Rng } from '../core/rng';
 import type { Kart, KartCtl } from './kart';
 import { wrapAngle } from './kart';
 
+/** Lo que la IA necesita saber de la carrera para decidir objetos y poderes. */
+export interface AIContext {
+  order: Kart[];
+  /** 0 = fácil, 1 = normal, 2 = difícil. */
+  level: number;
+  gums: { x: number; z: number }[];
+}
+
 export class AIDriver {
   private offset = 0;
   private target = 0;
@@ -12,12 +20,16 @@ export class AIDriver {
   private reverseT = 0;
   private holdDrift = false;
   private holdT = 0;
-  private readonly ctl: KartCtl = { steer: 0, throttle: 0, brake: 0, drift: false };
+  private readonly ctl: KartCtl = { steer: 0, throttle: 0, brake: 0, drift: false, item: false, power: false };
+  private itemWait = -1;
+  private powerWait = -1;
+  private itemHeld = 0;
+  private powerHeld = 0;
 
   /** `driftSkill` 0..1: cuántas veces aprovecha los derrapes. */
   constructor(private rng: Rng, public driftSkill: number) {}
 
-  drive(k: Kart, dt: number, active: boolean): KartCtl {
+  drive(k: Kart, dt: number, active: boolean, ctx?: AIContext): KartCtl {
     const tr = k.track;
     const S = tr.samples;
     const N = tr.N;
@@ -77,6 +89,80 @@ export class AIDriver {
     c.throttle = throttle;
     c.brake = brake;
     c.drift = this.holdDrift;
+    c.item = false;
+    c.power = false;
+    if (ctx && active && !k.finished) this.decide(k, dt, ctx, c);
     return c;
+  }
+
+  /** Decide cuándo usar el objeto y el poder. Pulsa un solo cuadro (la carrera detecta el flanco). */
+  private decide(k: Kart, dt: number, ctx: AIContext, c: KartCtl): void {
+    const tr = k.track;
+    const step = tr.step;
+    const react = [this.rng.range(2, 4), this.rng.range(0.8, 2), this.rng.range(0.2, 0.8)][ctx.level];
+    const gapTo = (o: Kart): number => (o.progress - k.progress) * step; // + = va delante
+    const ahead = ctx.order[ctx.order.indexOf(k) - 1] ?? null;
+    const behind = ctx.order[ctx.order.indexOf(k) + 1] ?? null;
+    const straight = Math.abs(tr.samples[(k.idx + 20) % tr.N].curv) < 0.012;
+
+    // Objeto.
+    if (k.item && k.rouletteT <= 0) {
+      if (this.itemWait < 0) this.itemWait = react;
+      this.itemWait -= dt;
+      this.itemHeld += dt;
+      if (this.itemWait <= 0) {
+        let use = false;
+        if (k.item === 'turbo') use = straight || k.position >= 4 || this.itemHeld > 8;
+        else if (k.item === 'pelota') use = (!!ahead && gapTo(ahead) < 38 && Math.abs(ahead.lat - k.lat) < 4) || this.itemHeld > 10;
+        else use = (!!behind && -gapTo(behind) < 22) || this.itemHeld > 8;
+        if (use) {
+          c.item = true;
+          this.itemWait = -1;
+          this.itemHeld = 0;
+        }
+      }
+    } else {
+      this.itemWait = -1;
+      this.itemHeld = 0;
+    }
+
+    // Poder. En fácil, nunca en la primera vuelta.
+    if (k.power >= 1 && !(ctx.level === 0 && k.lap < 2)) {
+      if (this.powerWait < 0) this.powerWait = react * 1.5;
+      this.powerWait -= dt;
+      this.powerHeld += dt;
+      if (this.powerWait <= 0) {
+        const near = ctx.order.some((o) => o !== k && Math.hypot(o.pos.x - k.pos.x, o.pos.z - k.pos.z) < 13);
+        let use = false;
+        switch (k.char.id) {
+          case 'perro':
+            use = near;
+            break;
+          case 'esponja':
+            use = !!ahead && gapTo(ahead) < 110;
+            break;
+          case 'robot':
+            use = !!ahead;
+            break;
+          case 'raton':
+            use = k.position >= (ctx.level === 2 ? 2 : 3);
+            break;
+          case 'zorro':
+            use = straight || k.position >= 3;
+            break;
+          case 'dino':
+            use = near || ctx.gums.some((g) => Math.hypot(g.x - k.pos.x, g.z - k.pos.z) < 30);
+            break;
+        }
+        if (use || this.powerHeld > 14) {
+          c.power = true;
+          this.powerWait = -1;
+          this.powerHeld = 0;
+        }
+      }
+    } else {
+      this.powerWait = -1;
+      this.powerHeld = 0;
+    }
   }
 }

@@ -1,7 +1,7 @@
 // Física arcade del kart: aceleración exponencial, derrape con saltito y miniturbo de 3 niveles,
 // barreras que frenan y enderezan, saltos naturales en las crestas, vueltas y sentido contrario.
 import * as THREE from 'three';
-import { bus } from '../core/events';
+import { bus, type HitKind, type ItemId } from '../core/events';
 import type { Track, Surface } from './track';
 import { newLoc } from './track';
 import type { CharacterDef } from './characters';
@@ -12,9 +12,14 @@ export interface KartCtl {
   throttle: number;
   brake: number;
   drift: boolean;
+  item: boolean;
+  power: boolean;
 }
 
-export const NO_CTL: KartCtl = { steer: 0, throttle: 0, brake: 0, drift: false };
+export const NO_CTL: KartCtl = { steer: 0, throttle: 0, brake: 0, drift: false, item: false, power: false };
+
+/** Duración (s) de cada golpe. */
+export const HIT_TIME: Record<HitKind, number> = { spin: 1.15, stuck: 1.4, bubble: 2.0, shrink: 3.0, tumble: 0.9 };
 
 /** Ajustable en vivo desde DevTools: __game.TUNING. */
 export const TUNING = {
@@ -83,6 +88,27 @@ export class Kart {
   startHold = 0;
   landSquash = 0;
   lastLapTime = 0;
+  // --- Objetos, poder y golpes ---
+  item: ItemId | null = null;
+  /** Ruleta de la caja regalo en curso (s). */
+  rouletteT = 0;
+  /** Barra de poder 0..1. */
+  power = 0;
+  hitKind: HitKind | '' = '';
+  hitT = 0;
+  hitDur = 1;
+  invulnT = 0;
+  shrinkT = 0;
+  fireT = 0;
+  /** El Pisotón de Dino espera a aterrizar. */
+  stompPending = false;
+  /** Multiplicador de la duración de los golpes (perfil "Peque": menos de 1). */
+  hitScale = 1;
+  /** Ángulo visual del trompo. */
+  spinVisual = 0;
+  bubbleLift = 0;
+  shrinkScale = 1;
+  blinkT = 0;
   private prevDrift = false;
   private hopDrift = false;
   private bumpCooldown = 0;
@@ -113,6 +139,12 @@ export class Kart {
     this.place = 0;
     this.drift = this.driftCharge = this.driftLevel = this.driftVisual = 0;
     this.boostT = this.startHold = this.wrongWayT = 0;
+    this.item = null;
+    this.rouletteT = this.power = this.hitT = this.invulnT = this.shrinkT = this.fireT = 0;
+    this.hitKind = '';
+    this.stompPending = false;
+    this.spinVisual = this.bubbleLift = 0;
+    this.shrinkScale = 1;
     this.track.locate(this.pos.x, this.pos.z, this.idx, this.loc);
     this.progress = this.idx + this.loc.f;
     this.syncModel(0);
@@ -123,6 +155,27 @@ export class Kart {
     bus.emit('kart:boost', { kart: this.index, kind, seconds });
   }
 
+  /** Aplica un golpe. Devuelve false si el kart es invulnerable (fuego o recién golpeado). */
+  applyHit(kind: HitKind, by: number): boolean {
+    if (this.invulnT > 0 || this.fireT > 0 || this.finished) return false;
+    if (kind === 'shrink') {
+      this.shrinkT = HIT_TIME.shrink * this.hitScale;
+      this.invulnT = 0.6;
+    } else {
+      this.hitKind = kind;
+      this.hitDur = this.hitT = HIT_TIME[kind] * this.hitScale;
+      this.invulnT = this.hitT + 1.2;
+      this.boostT = 0;
+      if (this.drift !== 0) this.endDrift(false);
+      if (kind === 'tumble') {
+        this.grounded = false;
+        this.vy = 6.5;
+      }
+    }
+    bus.emit('kart:hit', { kart: this.index, kind, by });
+    return true;
+  }
+
   private endDrift(release: boolean): void {
     if (release && this.driftLevel > 0) this.boost('mini', TUNING.miniBoost[this.driftLevel - 1]);
     this.drift = this.driftCharge = this.driftLevel = 0;
@@ -131,13 +184,22 @@ export class Kart {
   update(dt: number, c: KartCtl, active: boolean): void {
     const T = TUNING;
     const tr = this.track;
-    const steerIn = active ? c.steer : 0;
+    // Golpes: el trompo, la burbuja y la voltereta quitan el control; el chicle solo frena.
+    if (this.hitT > 0) {
+      this.hitT -= dt;
+      if (this.hitT <= 0) this.hitKind = '';
+    }
+    const disabled = this.hitT > 0 && this.hitKind !== 'stuck';
+    if (this.invulnT > 0) this.invulnT -= dt;
+    if (this.shrinkT > 0) this.shrinkT -= dt;
+    if (this.fireT > 0) this.fireT -= dt;
+    const steerIn = active && !disabled ? c.steer : 0;
     this.steerS += (steerIn - this.steerS) * Math.min(1, dt * 12);
-    const throttle = active ? c.throttle : 0;
-    const brake = active ? c.brake : 0;
+    const throttle = active && !disabled ? c.throttle : 0;
+    const brake = active && !disabled ? c.brake : 0;
 
     // Saltito y derrape.
-    const driftHeld = active && c.drift;
+    const driftHeld = active && !disabled && c.drift;
     if (driftHeld && !this.prevDrift && this.grounded) {
       this.grounded = false;
       this.vy = T.hopVel + Math.max(0, this.vy);
@@ -170,8 +232,13 @@ export class Kart {
       this.boostT -= dt;
       maxS = T.maxSpeed * this.speedMult * T.boostMult;
     }
-    if (this.grounded) {
-      if (this.boostT > 0) this.speed += (maxS - this.speed) * Math.min(1, dt * 5);
+    if (this.fireT > 0) maxS = T.maxSpeed * this.speedMult * 1.5;
+    if (this.shrinkT > 0) maxS *= 0.62;
+    if (this.hitKind === 'stuck') maxS *= 0.3;
+    const surging = (this.boostT > 0 || this.fireT > 0) && !disabled;
+    if (disabled) this.speed *= Math.exp(-(this.hitKind === 'bubble' ? 4 : 2.6) * dt);
+    if (this.grounded && !disabled) {
+      if (surging) this.speed += (maxS - this.speed) * Math.min(1, dt * 5);
       else if (throttle > 0.05) {
         const target = maxS * throttle;
         if (this.speed < 0) this.speed += T.brake * dt;
@@ -315,6 +382,16 @@ export class Kart {
 
   private syncModel(dt: number): void {
     this.driftVisual += (this.drift * 0.38 - this.driftVisual) * Math.min(1, dt * 8);
+    // Trompo: dos vueltas completas con frenado suave (termina mirando hacia delante, sin saltos).
+    if ((this.hitKind === 'spin' || this.hitKind === 'tumble') && this.hitT > 0) {
+      const u = 1 - this.hitT / this.hitDur;
+      this.spinVisual = Math.PI * 4 * (1 - (1 - u) * (1 - u));
+    } else this.spinVisual = 0;
+    const lift = this.hitKind === 'bubble' && this.hitT > 0 ? 1.6 + Math.sin(this.hitT * 5) * 0.25 : 0;
+    this.bubbleLift += (lift - this.bubbleLift) * Math.min(1, dt * 5);
+    const sc = this.shrinkT > 0 ? 0.55 : 1;
+    this.shrinkScale += (sc - this.shrinkScale) * Math.min(1, dt * 7);
+    this.blinkT += dt;
     this.landSquash = Math.max(0, this.landSquash - dt * 4);
     this.model.update(this, dt);
   }

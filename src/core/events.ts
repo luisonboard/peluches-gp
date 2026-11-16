@@ -11,7 +11,21 @@ export interface EventMap {
   'kart:drift': { kart: number; level: number };
   'kart:hop': { kart: number };
   'kart:land': { kart: number; strength: number };
+  /** Golpe recibido. `by` = kart que lo causó (−1 si nadie). */
+  'kart:hit': { kart: number; kind: HitKind; by: number };
+  'box:open': { kart: number; x: number; y: number; z: number };
+  'item:get': { kart: number; item: ItemId };
+  'item:use': { kart: number; item: ItemId };
+  'power:ready': { kart: number };
+  'power:use': { kart: number; power: Species };
+  'fx:explode': { x: number; y: number; z: number; big: boolean };
+  'fx:quake': { kart: number; x: number; y: number; z: number };
+  'fx:lightning': { kart: number };
 }
+
+export type HitKind = 'spin' | 'stuck' | 'bubble' | 'shrink' | 'tumble';
+export type ItemId = 'turbo' | 'pelota' | 'chicle';
+export type Species = 'perro' | 'esponja' | 'raton' | 'zorro' | 'dino' | 'robot';
 
 type Handler<T> = (payload: T) => void;
 

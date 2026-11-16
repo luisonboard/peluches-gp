@@ -3,6 +3,14 @@ import type { Race, CpuLevel } from '../game/race';
 import { CPU_LEVELS } from '../game/race';
 import type { Track } from '../game/track';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
+import type { ItemId } from '../core/events';
+
+export const ITEM_ICONS: Record<ItemId, string> = {
+  turbo: `<svg viewBox="0 0 64 64"><path d="M32 5c10 8 14 21 12 35H20C18 26 22 13 32 5z" fill="#e8423a" stroke="#2a2050" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="25" r="6" fill="#8fd0ff" stroke="#2a2050" stroke-width="3"/><path d="M20 38l-9 11h13zM44 38l9 11H40z" fill="#ffd23a" stroke="#2a2050" stroke-width="3" stroke-linejoin="round"/><path d="M25 43h14l-7 16z" fill="#ff9a2a"/></svg>`,
+  pelota: `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="24" fill="#fff"/><path d="M32 8a24 24 0 0 1 0 48a9 24 0 0 0 0-48z" fill="#2f7de0"/><path d="M32 8a24 24 0 0 0 0 48a9 24 0 0 1 0-48z" fill="#e8423a"/><path d="M32 8a24 24 0 0 1 21 12a30 30 0 0 0-42 0A24 24 0 0 1 32 8z" fill="#ffd23a"/><circle cx="32" cy="32" r="24" fill="none" stroke="#2a2050" stroke-width="4"/></svg>`,
+  chicle: `<svg viewBox="0 0 64 64"><path d="M9 40c0-12 10-20 23-20s23 8 23 20c0 8-8 13-23 13S9 48 9 40z" fill="#ff7ab8" stroke="#2a2050" stroke-width="4"/><ellipse cx="24" cy="32" rx="7" ry="3.5" fill="#fff" opacity=".75"/><circle cx="44" cy="22" r="7" fill="#ffb0d6" stroke="#2a2050" stroke-width="3"/></svg>`,
+};
+const ITEM_ORDER: ItemId[] = ['turbo', 'pelota', 'chicle'];
 
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
@@ -79,6 +87,27 @@ const CSS = `
   .pgp-opt { padding: 5px 14px; font-size: 15px; }
   .pgp-go { font-size: 22px; padding: 8px 32px; margin: 10px auto 0; }
 }
+#hud-item { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%);
+  display: grid; justify-items: center; gap: 6px; }
+#hud-item .slot { width: clamp(58px, 11vh, 84px); height: clamp(58px, 11vh, 84px); border-radius: 22px; background: rgba(255,255,255,0.88);
+  border: 5px solid #2a2050; display: grid; place-items: center; box-shadow: 0 5px 0 rgba(42,32,80,.35); }
+#hud-item .slot svg { width: 78%; height: 78%; }
+#hud-item .slot.empty { background: rgba(255,255,255,0.35); border-color: rgba(42,32,80,0.5); box-shadow: none; }
+#hud-item .slot.spin svg { animation: pgp-wob .12s linear infinite alternate; }
+@keyframes pgp-wob { from { transform: scale(.85) rotate(-8deg) } to { transform: scale(1) rotate(8deg) } }
+#hud-power { width: clamp(150px, 26vh, 220px); background: rgba(42,32,80,.75); border-radius: 999px; padding: 4px; position: relative; }
+#hud-power .fill { height: 16px; border-radius: 999px; width: 0%; transition: width .15s linear; }
+#hud-power .lbl { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 900; letter-spacing: .03em; color: #fff;
+  text-shadow: 0 1px 0 #2a2050, 0 -1px 0 #2a2050, 1px 0 0 #2a2050, -1px 0 0 #2a2050; white-space: nowrap; }
+#hud-power.ready { animation: pgp-ready .5s ease-in-out infinite alternate; }
+@keyframes pgp-ready { from { box-shadow: 0 0 0 0 rgba(255,210,58,.0) } to { box-shadow: 0 0 0 6px rgba(255,210,58,.9) } }
+#hud-flash { position: fixed; inset: 0; background: #fffbe0; opacity: 0; pointer-events: none; z-index: 4; transition: opacity .35s ease-out; }
+#hud-toast { position: absolute; left: 0; right: 0; top: 46%; text-align: center; font-weight: 900; font-size: clamp(22px, 4.5vh, 38px); }
+#hud-toast.pop { animation: pgp-toast 1.6s ease-out both; }
+@keyframes pgp-toast { 0% { transform: translateY(10px); opacity: 0 } 15% { transform: none; opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }
+.pgp-power-info { margin: 8px 4px 0; font-size: 15px; font-weight: 700; color: #4a4480; }
+.pgp-power-info b { color: #2a2050; }
+@media (max-height: 520px) { .pgp-power-info { font-size: 12px; margin-top: 4px; } }
 #pgp-bench { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; background: rgba(20,18,50,.9); color: #fff;
   font: 600 14px/1.5 ui-monospace, Menlo, monospace; padding: 10px 14px; border-radius: 12px; white-space: pre; pointer-events: none; }
 `;
@@ -118,6 +147,15 @@ export class Hud {
   private focus = 0;
   private lastLapHtml = '';
   private benchEl: HTMLElement | null = null;
+  private itemBox = el('div');
+  private itemSlot = el('div', 'slot');
+  private powerBar = el('div');
+  private powerFill = el('div', 'fill');
+  private powerLbl = el('div', 'lbl');
+  private flashEl = el('div');
+  private toastEl = el('div', 'stroke');
+  private shownItem = '';
+  private rouletteIdx = 0;
 
   constructor() {
     const style = el('style');
@@ -131,13 +169,20 @@ export class Hud {
     this.map.id = 'hud-map';
     this.map.width = this.map.height = 380;
     this.mapCtx = this.map.getContext('2d')!;
-    this.root.append(this.pos, this.lap, this.map, this.msg, this.wrong);
+    this.itemBox.id = 'hud-item';
+    this.powerBar.id = 'hud-power';
+    this.powerBar.append(this.powerFill, this.powerLbl);
+    this.itemBox.append(this.itemSlot, this.powerBar);
+    this.flashEl.id = 'hud-flash';
+    this.toastEl.id = 'hud-toast';
+    this.root.append(this.pos, this.lap, this.map, this.itemBox, this.msg, this.toastEl, this.wrong);
+    document.body.append(this.flashEl);
     document.body.append(this.root);
     this.setRaceVisible(false);
   }
 
   setRaceVisible(v: boolean): void {
-    for (const e of [this.pos, this.lap, this.map]) e.style.display = v ? '' : 'none';
+    for (const e of [this.pos, this.lap, this.map, this.itemBox]) e.style.display = v ? '' : 'none';
     if (!v) this.wrong.style.display = 'none';
   }
 
@@ -172,7 +217,55 @@ export class Hud {
     m.classList.add('pop');
   }
 
+  /** Destello de pantalla (rayo). */
+  screenFlash(strength = 0.85): void {
+    const f = this.flashEl;
+    f.style.transition = 'none';
+    f.style.opacity = String(strength);
+    void f.offsetWidth;
+    f.style.transition = 'opacity .45s ease-out';
+    f.style.opacity = '0';
+  }
+
+  /** Aviso corto a media pantalla ("¡Te dio Chispa!"). */
+  toast(text: string, color = '#ffffff'): void {
+    const t = this.toastEl;
+    t.textContent = text;
+    t.style.color = color;
+    t.className = 'stroke';
+    void t.offsetWidth;
+    t.classList.add('pop');
+  }
+
+  private updateItem(race: Race): void {
+    const p = race.player;
+    let key: string;
+    if (p.rouletteT > 0) {
+      this.rouletteIdx = (this.rouletteIdx + 1) % 18;
+      key = `r${Math.floor(this.rouletteIdx / 6)}`;
+      if (key !== this.shownItem) {
+        this.itemSlot.innerHTML = ITEM_ICONS[ITEM_ORDER[Math.floor(this.rouletteIdx / 6)]];
+        this.itemSlot.className = 'slot spin';
+      }
+    } else {
+      key = p.item ?? '';
+      if (key !== this.shownItem) {
+        this.itemSlot.innerHTML = p.item ? ITEM_ICONS[p.item] : '';
+        this.itemSlot.className = p.item ? 'slot' : 'slot empty';
+      }
+    }
+    this.shownItem = key;
+    const pct = Math.round(p.power * 100);
+    this.powerFill.style.width = `${pct}%`;
+    this.powerFill.style.background = cssColor(p.char.color);
+    const ready = p.power >= 1;
+    this.powerBar.classList.toggle('ready', ready);
+    const lbl = ready ? `¡${p.char.power}! (E · X)` : p.char.power;
+    if (this.powerLbl.textContent !== lbl) this.powerLbl.textContent = lbl;
+  }
+
   update(race: Race): void {
+    this.updateItem(race);
     const p = race.player;
     const total = race.karts.length;
     this.pos.innerHTML = `${ordinal(p.position)}<small>/${total}</small>`;
@@ -265,6 +358,8 @@ export class Hud {
       return b;
     });
     card.append(charRow);
+    const powerInfo = el('div', 'pgp-power-info');
+    card.append(powerInfo);
 
     const opts = el('div', 'pgp-opts');
     const cpuCol = el('div');
@@ -297,10 +392,12 @@ export class Hud {
     go.onclick = () => onStart();
     goRow.append(go);
     card.append(goRow);
-    card.append(el('div', 'pgp-hint', 'Teclado: flechas para manejar · Espacio derrapa · Esc pausa &nbsp;|&nbsp; Mando: B acelera · A frena · R derrapa'));
+    card.append(el('div', 'pgp-hint', 'Teclado: flechas · Espacio derrapa · Shift objeto · E poder &nbsp;|&nbsp; Mando: B acelera · A frena · R derrapa · L objeto · X poder'));
 
     const s = { ...setup };
     const refresh = (): void => {
+      const ch = CHARACTERS[s.charIndex];
+      powerInfo.innerHTML = `<b>${displayName(ch)}</b> · ${ch.power}: ${ch.powerDesc.toLowerCase()}`;
       charBtns.forEach((b, i) => b.classList.toggle('sel', i === s.charIndex));
       cpuBtns.forEach((b, i) => b.classList.toggle('sel', CPU_LEVELS[i].id === s.cpu.id));
       lapBtns.forEach((b, i) => b.classList.toggle('sel', [2, 3][i] === s.laps));

@@ -1,6 +1,7 @@
 // Los peluches. Los nombres por defecto se pueden cambiar desde el juego (hito 3); se guardan en el dispositivo.
 
-export type Species = 'perro' | 'esponja' | 'raton' | 'zorro' | 'dino' | 'robot';
+import type { Species } from '../core/events';
+export type { Species };
 
 export interface CharacterDef {
   id: Species;

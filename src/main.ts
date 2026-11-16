@@ -21,6 +21,9 @@ import { ChaseCam, orbitCam, topCam } from './game/camera';
 import { Particles } from './fx/particles';
 import { GameAudio } from './audio/audio';
 import { Hud, type TitleSetup } from './ui/hud';
+import { Arena } from './game/arena';
+import { PlushMaterials } from './game/plush';
+import { displayName } from './game/characters';
 
 installErrorHooks();
 
@@ -40,6 +43,10 @@ const chase = new ChaseCam(camera);
 const sparks = new Particles(quality.particles, true);
 const dust = new Particles(Math.round(quality.particles * 0.6), false);
 scene.add(sparks.points, dust.points);
+
+const arena = new Arena(track, tex, sparks, dust, rng.fork('objetos'));
+scene.add(arena.group);
+const plushMats = new PlushMaterials(quality.name !== 'low');
 
 const audio = new GameAudio(!params.noaudio);
 const input = new Input();
@@ -83,12 +90,12 @@ function buildRace(): void {
   const roster = [CHARACTERS[setup.charIndex], ...others];
   const aiRng = rng.fork(`ia-${Date.now()}`);
   karts = roster.map((c, i) => {
-    const model = new KartModel(c, quality.shadowMap > 0 ? null : tex.blob, quality.shadowMap > 0);
+    const model = new KartModel(c, quality.shadowMap > 0 ? null : tex.blob, quality.shadowMap > 0, plushMats);
     scene.add(model.root);
     return new Kart(i, c, i === 0, model, track);
   });
   const ais = karts.map((_, i) => new AIDriver(aiRng.fork(`p${i}`), i === 0 ? 0.8 : setup.cpu.driftSkill));
-  race = new Race(karts, ais, setup.laps, setup.cpu, params.autoplay, aiRng.fork('carrera'));
+  race = new Race(karts, ais, setup.laps, setup.cpu, params.autoplay, aiRng.fork('carrera'), arena);
   chase.reset();
 }
 
@@ -191,6 +198,73 @@ bus.on('kart:land', ({ kart, strength }) => {
   }
 });
 
+// Objetos y poderes: el sonido baja con la distancia al jugador.
+function volAt(x: number, z: number): number {
+  const p = karts[0];
+  if (!p) return 0;
+  return Math.max(0, 1 - Math.hypot(p.pos.x - x, p.pos.z - z) / 90);
+}
+const volKart = (i: number): number => (i === 0 ? 1 : karts[i] ? volAt(karts[i].pos.x, karts[i].pos.z) : 0);
+const POWER_SAY: Record<string, string> = {
+  perro: '¡Guau guau!', esponja: '¡Burbuja!', raton: '¡Rayo!', zorro: '¡Fuego de zorro!', dino: '¡Pisotón!', robot: '¡Misil imán!',
+};
+
+bus.on('box:open', ({ kart }) => {
+  if (kart === 0) audio.box();
+});
+let rouletteTick = 0;
+bus.on('item:get', ({ kart }) => {
+  if (kart === 0) audio.itemGet();
+});
+bus.on('item:use', ({ kart, item }) => {
+  const v = volKart(kart);
+  if (item === 'pelota') audio.throwBall(v);
+  else if (item === 'chicle') audio.gum(v);
+});
+bus.on('power:ready', ({ kart }) => {
+  if (kart === 0) audio.powerReady();
+});
+bus.on('power:use', ({ kart, power }) => {
+  const v = volKart(kart);
+  if (kart === 0) hud.flash(POWER_SAY[power], true, '#ffd23a');
+  else if (v > 0.3) hud.toast(`${displayName(karts[kart].char)}: ${karts[kart].char.power}`, '#ffe9a8');
+  if (power === 'perro') {
+    audio.bark(v);
+    if (kart === 0 || v > 0.6) chase.shake(0.2);
+  } else if (power === 'esponja') audio.bubble(v);
+  else if (power === 'zorro') audio.fire(v);
+  else if (power === 'dino') audio.jump(v);
+  else if (power === 'robot') audio.missile(v);
+});
+bus.on('fx:lightning', () => {
+  audio.thunder();
+  hud.screenFlash(0.8);
+});
+bus.on('fx:quake', ({ x, z }) => {
+  const v = volAt(x, z);
+  audio.quake(v);
+  chase.shake(0.7 * v);
+  input.rumble(0.8 * v, 0.4 * v, 450);
+});
+bus.on('fx:explode', ({ x, z, big }) => {
+  const v = volAt(x, z);
+  audio.explosion(v, big);
+  if (v > 0.6) chase.shake(big ? 0.45 : 0.2);
+});
+bus.on('kart:hit', ({ kart, kind, by }) => {
+  const v = volKart(kart);
+  if (kind === 'stuck') audio.stuck(v);
+  else if (kind === 'bubble') audio.pop(v);
+  else if (kind !== 'shrink') audio.hit(v);
+  if (kart === 0) {
+    input.rumble(0.9, 0.5, 350);
+    chase.shake(0.35);
+    const who = by >= 0 && by !== 0 ? karts[by] : null;
+    const what = { spin: '¡Uy!', stuck: '¡Chicle!', bubble: '¡Atrapado!', shrink: '¡Pequeñito!', tumble: '¡Bum!' }[kind];
+    hud.toast(who ? `${what} ${displayName(who.char)} te dio` : what, '#ffb0b0');
+  }
+});
+
 const DRIFT_COLORS = [0xfff3d6, 0x4aa8ff, 0xff9a2a, 0xff5ad8];
 
 function kartFx(k: Kart, dt: number): void {
@@ -221,6 +295,14 @@ function kartFx(k: Kart, dt: number): void {
         const z = k.pos.z - fz * 1.8 + rz * side;
         sparks.spawn(x, k.pos.y + 0.9, z, -fx * 7 + k.vel.x * 0.6, 0.5, -fz * 7 + k.vel.z * 0.6, 0.22, 0.9, 0.15, Math.random() < 0.5 ? 0xffb52a : 0xff6a1a, 1, -2, 3);
       }
+    }
+  }
+  if (k.fireT > 0) {
+    const n = 90 * q * dt + Math.random();
+    for (let i = 0; i < Math.floor(n); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 1.1 + Math.random() * 0.6;
+      sparks.spawn(k.pos.x + Math.cos(a) * r, k.pos.y + 0.3 + Math.random() * 1.8, k.pos.z + Math.sin(a) * r, k.vel.x * 0.5, 2.5 + Math.random() * 2, k.vel.z * 0.5, 0.4, 1.1, 0.2, Math.random() < 0.5 ? 0xff7a1a : 0xffd23a, 1, -3, 1);
     }
   }
   if (k.offroad && k.grounded && Math.abs(k.speed) > 6) {
@@ -284,9 +366,9 @@ function frame(dt: number): void {
 
   if (mode === 'title') {
     titleT += dt;
-    race.update(dt, ctl);
+    race.update(dt, ctl, camera);
   } else if (mode === 'race' || mode === 'results') {
-    for (let s = 0; s < params.speed; s++) race.update(dt, ctl);
+    for (let s = 0; s < params.speed; s++) race.update(dt, ctl, camera);
     for (const k of karts) kartFx(k, dt);
     if (race.phase === 'done') {
       if (resultsShownAt < 0 && race.time - race.doneAt > 2.5) {
@@ -299,7 +381,9 @@ function frame(dt: number): void {
 
   // Cámara.
   const p = karts[0];
-  if (params.cam === 'top') topCam(camera, track);
+  if (params.cam === 'free') {
+    /* cámara libre: se mueve desde DevTools (__game.camera) */
+  } else if (params.cam === 'top') topCam(camera, track);
   else if (mode === 'title') orbitCam(camera, track, titleT);
   else if (mode !== 'paused') chase.update(dt, p);
   followSun(stage, p.pos.x, p.pos.y, p.pos.z);
@@ -309,7 +393,13 @@ function frame(dt: number): void {
     sparks.update(dt, camera, renderer.domElement.height);
     dust.update(dt, camera, renderer.domElement.height);
   }
-  if (mode === 'race' || mode === 'results') hud.update(race);
+  if (mode === 'race' || mode === 'results') {
+    hud.update(race);
+    if (p.rouletteT > 0 && (rouletteTick += dt) > 0.08) {
+      rouletteTick = 0;
+      audio.roulette();
+    }
+  }
   const racing = mode === 'race' || mode === 'results';
   audio.setEngine(Math.min(1.3, Math.abs(p.speed) / TUNING.maxSpeed), racing ? 1 : 0, p.boostT > 0, p.driftLevel, p.drift !== 0 && p.grounded, racing && !p.finished);
 
@@ -339,6 +429,8 @@ window.__game = {
   camera,
   renderer,
   scene,
+  bus,
+  arena,
   quality,
   dynRes,
   loop,

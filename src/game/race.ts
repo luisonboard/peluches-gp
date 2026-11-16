@@ -4,7 +4,8 @@ import { bus } from '../core/events';
 import type { Rng } from '../core/rng';
 import type { Kart, KartCtl } from './kart';
 import { NO_CTL, TUNING } from './kart';
-import type { AIDriver } from './ai';
+import type { AIDriver, AIContext } from './ai';
+import type { Arena } from './arena';
 
 export type Phase = 'grid' | 'countdown' | 'racing' | 'done';
 
@@ -34,6 +35,9 @@ export class Race {
   doneAt = 0;
   private lastCount = 5;
   private finished = 0;
+  private prevItem: boolean[] = [];
+  private prevPower: boolean[] = [];
+  private readonly ctx: AIContext = { order: [], level: 0, gums: [] };
 
   constructor(
     readonly karts: Kart[],
@@ -42,8 +46,11 @@ export class Race {
     readonly cpu: CpuLevel,
     public autoplay: boolean,
     private rng: Rng,
+    readonly arena: Arena,
   ) {
     this.placeOnGrid();
+    arena.reset(karts, () => this.order);
+    this.ctx.level = CPU_LEVELS.indexOf(cpu);
   }
 
   get player(): Kart {
@@ -73,7 +80,8 @@ export class Race {
     this.lastCount = 5;
   }
 
-  update(dt: number, playerCtl: KartCtl): void {
+  update(dt: number, playerCtl: KartCtl, cam: import('three').Camera): void {
+    this.arena.update(dt, this.phase === 'racing' || this.phase === 'done', cam);
     if (this.phase === 'grid') {
       for (const k of this.karts) k.update(dt, NO_CTL, false);
       return;
@@ -99,11 +107,17 @@ export class Race {
     }
 
     this.time += dt;
+    this.ctx.order = this.order;
+    this.ctx.gums = this.arena.activeGums;
     for (let n = 0; n < this.karts.length; n++) {
       const k = this.karts[n];
       const useAi = !k.isPlayer || this.autoplay || k.finished;
-      const ctl = useAi ? this.ais[n].drive(k, dt, true) : playerCtl;
+      const ctl = useAi ? this.ais[n].drive(k, dt, true, this.ctx) : playerCtl;
       k.update(dt, ctl, true);
+      if (ctl.item && !this.prevItem[n] && !k.finished) this.arena.useItem(k);
+      if (ctl.power && !this.prevPower[n] && !k.finished) this.arena.usePower(k);
+      this.prevItem[n] = ctl.item;
+      this.prevPower[n] = ctl.power;
     }
     this.collide();
     for (const k of this.karts) {
