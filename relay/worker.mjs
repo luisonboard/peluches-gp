@@ -1,5 +1,6 @@
-// Worker de Cloudflare con el relevo de salas: el mismo esquema que el servidor de desarrollo (rooms.mjs), dentro de
-// un Durable Object para que todos los jugadores lleguen a la misma memoria. Rutas: /relay/health y /relay (WebSocket).
+// Worker de Cloudflare de Peluches GP: sirve el juego (dist, como recursos estáticos) y el relevo de salas con el
+// mismo esquema que el servidor de desarrollo (rooms.mjs), dentro de un Durable Object para que todos los jugadores
+// lleguen a la misma memoria. Rutas propias: /relay/health y /relay (WebSocket); lo demás son los archivos del juego.
 import { createRelay } from './rooms.mjs';
 
 const CORS = { 'access-control-allow-origin': '*', 'cache-control': 'no-store' };
@@ -14,7 +15,7 @@ export default {
       if (req.headers.get('upgrade') !== 'websocket') return new Response('Se espera un WebSocket', { status: 426 });
       return env.ROOMS.get(env.ROOMS.idFromName('salas')).fetch(req);
     }
-    return new Response('Peluches GP: relevo de salas', { headers: CORS });
+    return env.ASSETS ? env.ASSETS.fetch(req) : new Response('Peluches GP: relevo de salas', { headers: CORS });
   },
 };
 

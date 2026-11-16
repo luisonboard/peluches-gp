@@ -1,7 +1,7 @@
 # Peluches GP
 
 Carreras de karts en 3D con los peluches de la casa (three.js 0.180 + TypeScript + Vite).
-Juego publicado: https://peluches-gp.pages.dev · plan completo: [`PLAN.md`](PLAN.md) · página del plan: https://claude.ai/artifact/8o3YVSEW8t3RbbNTkvtMkC
+Juego publicado: https://peluches-gp.luisonboard.workers.dev · plan completo: [`PLAN.md`](PLAN.md) · página del plan: https://claude.ai/artifact/8o3YVSEW8t3RbbNTkvtMkC
 
 ## Uso
 
@@ -15,12 +15,15 @@ npm run typecheck
 
 ### Publicar
 
-- **Juego (Cloudflare Pages, https://peluches-gp.pages.dev):** proyecto `peluches-gp` conectado al repositorio de GitHub, preset *Vite*, comando `npm run build`,
-  carpeta `dist`. Cada `git push` a `main` publica. `public/` trae el manifiesto, los íconos, el service worker
-  (`sw.js`, sin conexión) y `_headers`.
-- **Relevo de salas (Worker de Cloudflare con Durable Object):** `cd relay && npm install && npx wrangler login`
-  (una vez) y `npm run deploy`. La dirección del Worker (https://peluches-gp-relay.luisonboard.workers.dev) va en `.env.production` (`VITE_RELAY_URL`); el juego usa el
-  relevo del mismo servidor si existe (desarrollo) y si no, el Worker. Si ninguno responde, conexión directa (PeerJS).
+Un solo Worker de Cloudflare (`wrangler.toml`) sirve el juego compilado (`dist`, recursos estáticos con `_headers`)
+y el relevo de salas en `/relay` (`relay/worker.mjs` + `relay/rooms.mjs`, en un Durable Object), en la misma
+dirección: https://peluches-gp.luisonboard.workers.dev
+
+- Automático: el Worker está conectado al repositorio de GitHub (Workers Builds: `npm run build`, despliegue
+  `npx wrangler deploy`); cada `git push` a `main` publica.
+- A mano: `npm run deploy` (pide `npx wrangler login` una vez). Para probar el Worker en local: `npm run dev:worker`.
+- El juego busca el relevo en su propia dirección; `VITE_RELAY_URL` permite apuntar a otro. Si no hay relevo,
+  conexión directa (PeerJS).
 - Íconos: `icons-src/*.svg`, exportados a `public/icon-*.png`.
 
 ## Controles
@@ -165,13 +168,13 @@ del anfitrión (aviso al invitado).
 - PWA: `manifest.webmanifest` (pantalla completa, horizontal), íconos 180/192/512 y máscara para Android, metas de
   iOS. Service worker: la página se pide a la red y, sin red, sale de la caché; abre sin conexión.
 - Ajustes → Instalar como app: botón en Android/Chrome; instrucciones de Safari en el iPhone.
-- Relevo de salas en un Worker de Cloudflare (`relay/worker.mjs`) con el mismo código de salas que el servidor de
-  desarrollo (`relay/rooms.mjs`) dentro de un Durable Object; límite de mensajes de 32 KB y de 600 conexiones.
+- Publicado como un único Worker de Cloudflare: el juego y el relevo de salas (`relay/worker.mjs`, mismo código de
+  salas que el servidor de desarrollo, dentro de un Durable Object; mensajes de hasta 32 KB, 600 conexiones).
 
-Comprobado en Chrome sin interfaz con la versión compilada servida aparte y el Worker en `wrangler dev`: manifiesto
+Comprobado en Chrome sin interfaz con el Worker en `wrangler dev`: manifiesto
 sin errores, service worker activo y controlando la página, recarga sin red con el juego en el título y 0 errores,
 y una sala creada en una pestaña y unida desde otra a través del Worker (transporte "relevo", los dos ven a los dos).
-Repetido con lo publicado (https://peluches-gp.pages.dev + Worker en workers.dev): mismos resultados; ida y vuelta
+Repetido con lo publicado en https://peluches-gp.luisonboard.workers.dev: mismos resultados; ida y vuelta
 de un mensaje por el relevo ≈ 68 ms desde Ecuador.
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)

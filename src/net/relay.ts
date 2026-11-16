@@ -3,8 +3,8 @@
 import type { Msg } from './protocol';
 import { randomCode } from './net';
 
-// En desarrollo el relevo está en el mismo servidor (/relay). Publicado, lo da un Worker de Cloudflare cuya
-// dirección se fija al compilar (VITE_RELAY_URL, en .env.production).
+// El relevo está en el mismo servidor que el juego (Vite en desarrollo, el Worker publicado). VITE_RELAY_URL permite
+// usar otro al compilar.
 const REMOTE = (import.meta.env.VITE_RELAY_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 let base = '';
 
