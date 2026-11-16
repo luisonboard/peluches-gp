@@ -3,19 +3,35 @@
 import type { Msg } from './protocol';
 import { randomCode } from './net';
 
-const url = (): string => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/relay`;
+// En desarrollo el relevo está en el mismo servidor (/relay). Publicado, lo da un Worker de Cloudflare cuya
+// dirección se fija al compilar (VITE_RELAY_URL, en .env.production).
+const REMOTE = (import.meta.env.VITE_RELAY_URL as string | undefined)?.replace(/\/$/, '') ?? '';
+let base = '';
 
-/** ¿El servidor que sirve el juego tiene relevo? */
-export async function relayAvailable(): Promise<boolean> {
+const url = (): string => `${base.replace(/^http/, 'ws')}/relay`;
+
+async function healthy(origin: string): Promise<boolean> {
   try {
     const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 1500);
-    const r = await fetch('/relay/health', { signal: ctl.signal, cache: 'no-store' });
+    const t = setTimeout(() => ctl.abort(), 2500);
+    const r = await fetch(`${origin}/relay/health`, { signal: ctl.signal, cache: 'no-store' });
     clearTimeout(t);
     return r.ok && (await r.text()).trim() === 'ok';
   } catch {
     return false;
   }
+}
+
+/** ¿Hay relevo de salas? Primero el mismo servidor del juego y luego el Worker publicado. */
+export async function relayAvailable(): Promise<boolean> {
+  if (base) return true;
+  for (const o of [location.origin, REMOTE]) {
+    if (o && (await healthy(o))) {
+      base = o;
+      return true;
+    }
+  }
+  return false;
 }
 
 export class RelayHost {

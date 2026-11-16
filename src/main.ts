@@ -36,8 +36,10 @@ import type { RosterEntry } from './net/protocol';
 import { showOnlineMenu, showLobby, closeLobbyScreen } from './ui/lobby';
 import { normalizeCode } from './net/net';
 import { NO_CTL } from './game/kart';
+import { installPwa } from './pwa';
 
 installErrorHooks();
+installPwa();
 
 const app = document.getElementById('app')!;
 const quality = detectQuality(params.quality);

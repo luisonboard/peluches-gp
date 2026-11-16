@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7d8ce0"/><stop offset="1" stop-color="#4f5aa6"/>
+    </linearGradient>
+    <pattern id="chk" width="40" height="40" patternUnits="userSpaceOnUse">
+      <rect width="40" height="40" fill="#fff"/><rect width="20" height="20" fill="#2a2050"/><rect x="20" y="20" width="20" height="20" fill="#2a2050"/>
+    </pattern>
+    <radialGradient id="fur" cx=".45" cy=".35" r=".7">
+      <stop offset="0" stop-color="#e0a060"/><stop offset="1" stop-color="#b06a30"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g transform="translate(256 256) scale(.76) translate(-256 -256)"><rect y="392" width="512" height="120" fill="url(#chk)" opacity=".9"/>
+  <circle cx="256" cy="262" r="190" fill="#ffd34d" opacity=".25"/>
+  <!-- orejas -->
+  <path d="M150 150 C 95 150 80 250 108 300 C 125 330 160 315 165 280 Z" fill="#8a4e22"/>
+  <path d="M362 150 C 417 150 432 250 404 300 C 387 330 352 315 347 280 Z" fill="#8a4e22"/>
+  <!-- cabeza -->
+  <ellipse cx="256" cy="250" rx="132" ry="124" fill="url(#fur)"/>
+  <path d="M256 128 v244" stroke="#9a5a28" stroke-width="3" stroke-dasharray="9 8" opacity=".5"/>
+  <!-- hocico -->
+  <ellipse cx="256" cy="300" rx="74" ry="56" fill="#fbe7c8"/>
+  <ellipse cx="256" cy="276" rx="26" ry="18" fill="#2a2050"/>
+  <ellipse cx="248" cy="270" rx="8" ry="5" fill="#fff" opacity=".6"/>
+  <path d="M256 294 v14 M226 312 q30 26 60 0" fill="none" stroke="#2a2050" stroke-width="8" stroke-linecap="round"/>
+  <!-- ojos de botón -->
+  <circle cx="206" cy="222" r="21" fill="#2a2050"/><circle cx="306" cy="222" r="21" fill="#2a2050"/>
+  <circle cx="200" cy="215" r="7" fill="#fff"/><circle cx="300" cy="215" r="7" fill="#fff"/>
+  <circle cx="176" cy="276" r="16" fill="#ff8a8a" opacity=".55"/><circle cx="336" cy="276" r="16" fill="#ff8a8a" opacity=".55"/>
+  <!-- volante -->
+  <circle cx="256" cy="420" r="62" fill="none" stroke="#e8463a" stroke-width="20"/>
+  <path d="M200 420 h112 M256 420 v58" stroke="#e8463a" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="256" cy="420" r="16" fill="#ffd34d"/>
+</g></svg>

@@ -2,6 +2,7 @@
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
 import { applyProfile, type Settings, type Profile, type SteerMode, type GyroSens } from '../core/settings';
 import type { Gyro } from '../input/gyro';
+import { installState, promptInstall } from '../pwa';
 
 const CSS = `
 .pgp-set { width: min(640px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; box-sizing: border-box; }
@@ -190,6 +191,23 @@ export function openSettings(d: SettingsDeps): () => void {
       changed();
     };
     card.append(reset);
+
+    const inst = installState();
+    if (inst !== 'instalada') {
+      card.append(h('Instalar como app'));
+      if (inst === 'disponible') {
+        const b = document.createElement('button');
+        b.className = 'pgp-opt';
+        b.textContent = 'Instalar Peluches GP';
+        b.onclick = () => void promptInstall().then(() => render());
+        card.append(b);
+        card.append(note('Queda en la pantalla de inicio y se abre sin conexión.'));
+      } else if (inst === 'ios') {
+        card.append(note('En Safari: botón <b>Compartir</b> → <b>Añadir a pantalla de inicio</b>. Luego se abre a pantalla completa y sin conexión.'));
+      } else {
+        card.append(note('Desde el menú del navegador: <b>Instalar app</b> o <b>Añadir a pantalla de inicio</b>.'));
+      }
+    }
 
     card.append(h('Mando'));
     const pad = document.createElement('div');

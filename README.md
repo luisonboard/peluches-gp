@@ -13,6 +13,16 @@ npm run build      # dist/index.html (un único archivo)
 npm run typecheck
 ```
 
+### Publicar
+
+- **Juego (Cloudflare Pages):** proyecto conectado al repositorio de GitHub, preset *Vite*, comando `npm run build`,
+  carpeta `dist`. Cada `git push` a `main` publica. `public/` trae el manifiesto, los íconos, el service worker
+  (`sw.js`, sin conexión) y `_headers`.
+- **Relevo de salas (Worker de Cloudflare con Durable Object):** `cd relay && npm install && npx wrangler login`
+  (una vez) y `npm run deploy`. La dirección del Worker va en `.env.production` (`VITE_RELAY_URL`); el juego usa el
+  relevo del mismo servidor si existe (desarrollo) y si no, el Worker. Si ninguno responde, conexión directa (PeerJS).
+- Íconos: `icons-src/*.svg`, exportados a `public/icon-*.png`.
+
 ## Controles
 
 | Acción | Teclado | Mando (Switch Pro) |
@@ -149,6 +159,18 @@ del anfitrión (aviso al invitado).
   y la tabla de resultados a un lado (abajo en vertical).
 - Pantallas revisadas a 1280 × 720, 844 × 390 y 390 × 844: título, Ajustes, sala, pausa y resultados sin textos que
   se pisen ni botones fuera de la pantalla.
+
+**Hito 6 — app instalable y publicación** (terminado):
+
+- PWA: `manifest.webmanifest` (pantalla completa, horizontal), íconos 180/192/512 y máscara para Android, metas de
+  iOS. Service worker: la página se pide a la red y, sin red, sale de la caché; abre sin conexión.
+- Ajustes → Instalar como app: botón en Android/Chrome; instrucciones de Safari en el iPhone.
+- Relevo de salas en un Worker de Cloudflare (`relay/worker.mjs`) con el mismo código de salas que el servidor de
+  desarrollo (`relay/rooms.mjs`) dentro de un Durable Object; límite de mensajes de 32 KB y de 600 conexiones.
+
+Comprobado en Chrome sin interfaz con la versión compilada servida aparte y el Worker en `wrangler dev`: manifiesto
+sin errores, service worker activo y controlando la página, recarga sin red con el juego en el título y 0 errores,
+y una sala creada en una pestaña y unida desde otra a través del Worker (transporte "relevo", los dos ven a los dos).
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 
