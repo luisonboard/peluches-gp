@@ -8,7 +8,7 @@ Plan completo: [`PLAN.md`](PLAN.md) · página del plan: https://claude.ai/artif
 ```sh
 npm install
 npm run dev        # http://127.0.0.1:5174
-npm run dev:lan    # https://<IP-del-Mac>:5175 en la red local (para probar en el teléfono: giroscopio y mandos piden HTTPS)
+npm run dev:lan    # https://<IP-del-Mac>:5175 (con relevo de salas multijugador) en la red local (para probar en el teléfono: giroscopio y mandos piden HTTPS)
 npm run build      # dist/index.html (un único archivo)
 npm run typecheck
 ```
@@ -121,8 +121,10 @@ asfalto. Manteniendo la derecha o girando al azar: 0 choques. Giroscopio simulad
   `?sala=CÓDIGO`; los demás escriben el código o escanean el QR. Hasta 6 jugadores; la IA llena los puestos libres.
 - Sala de espera común: cada uno elige su peluche (no se repiten) y su nombre viaja con él; el anfitrión elige
   vueltas y dificultad de la IA y pulsa ¡A correr!.
-- Conexión directa entre dispositivos con PeerJS 1.5.4 (WebRTC). El servidor público de PeerJS solo sirve para
-  encontrarse; necesita Internet. Topología en estrella: el anfitrión reenvía.
+- Dos formas de conectar, elegidas solas: **relevo** por WebSocket (`/relay`) cuando el servidor que sirve el juego lo
+  tiene (el de desarrollo sí: `relay/rooms.mjs`), que funciona en cualquier red; si no, **conexión directa** con
+  PeerJS 1.5.4 (WebRTC), que depende de que la red deje conectar los dispositivos entre sí (muchas Wi-Fi caseras no lo
+  permiten). Topología en estrella: el anfitrión reenvía.
 - Cada dispositivo simula su kart (sin retraso al manejar) y envía su estado 20 veces por segundo; los demás karts se
   predicen con su última velocidad y se suavizan. El anfitrión simula la IA y decide los puestos de llegada.
 - Objetos y poderes en red: quien los usa avisa a todos (con el objetivo ya elegido) y cada dispositivo decide los

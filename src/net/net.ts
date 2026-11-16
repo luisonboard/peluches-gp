@@ -126,8 +126,18 @@ export class NetGuest {
           reject(new Error(text));
         } else this.onClose(text);
       };
-      const timer = setTimeout(() => fail('No se encontró la sala. Revisa el código y que el anfitrión siga en la sala de espera.'), 12000);
+      let reached = false;
+      const timer = setTimeout(
+        () =>
+          fail(
+            reached
+              ? 'Se encontró la sala, pero esta red no deja conectar los dispositivos directamente. Abran el juego desde el mismo servidor (con relevo) o prueben otra red.'
+              : 'No hay conexión con el servidor de salas. Revisa que haya Internet.',
+          ),
+        12000,
+      );
       peer.on('open', () => {
+        reached = true;
         const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
         conn.on('open', () => {
           clearTimeout(timer);

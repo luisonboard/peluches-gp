@@ -7,6 +7,7 @@ import type { Kart } from '../game/kart';
 import type { Race } from '../game/race';
 import type { Arena } from '../game/arena';
 import { NetHost, NetGuest, normalizeCode } from './net';
+import { RelayHost, RelayGuest, relayAvailable } from './relay';
 import { MAX_PLAYERS, PROTOCOL, type LobbyPlayer, type Msg, type RosterEntry } from './protocol';
 
 export interface SessionHooks {
@@ -34,8 +35,10 @@ export class Session {
   cpu = 'facil';
   racing = false;
   roster: RosterEntry[] = [];
-  private host: NetHost | null = null;
-  private guest: NetGuest | null = null;
+  private host: NetHost | RelayHost | null = null;
+  private guest: NetGuest | RelayGuest | null = null;
+  /** "relevo" si los mensajes pasan por el servidor del juego; "directa" con PeerJS. */
+  transport: 'relevo' | 'directa' = 'directa';
   private race: Race | null = null;
   private karts: Kart[] = [];
   private sendT = 0;
@@ -66,7 +69,8 @@ export class Session {
     this.role = 'host';
     this.laps = laps;
     this.cpu = cpu;
-    const h = (this.host = new NetHost());
+    this.transport = (await relayAvailable()) ? 'relevo' : 'directa';
+    const h = (this.host = this.transport === 'relevo' ? new RelayHost() : new NetHost());
     this.code = await h.open();
     this.players = [{ slot: 0, peer: '', name, char, host: true, waiting: false }];
     this.me = 0;
@@ -79,7 +83,8 @@ export class Session {
   async join(rawCode: string, char: Species, name: string): Promise<void> {
     this.role = 'guest';
     this.code = normalizeCode(rawCode);
-    const g = (this.guest = new NetGuest());
+    this.transport = (await relayAvailable()) ? 'relevo' : 'directa';
+    const g = (this.guest = this.transport === 'relevo' ? new RelayGuest() : new NetGuest());
     g.onMsg = (m) => this.guestMsg(m);
     g.onClose = (t) => this.fail(t);
     await g.connect(this.code);
