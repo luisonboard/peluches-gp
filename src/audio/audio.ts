@@ -1,0 +1,151 @@
+// Audio sintetizado con Web Audio: motor del kart del jugador, chirrido de derrape y efectos.
+// Se crea en la primera interacción (los navegadores no dejan sonar antes).
+
+export class GameAudio {
+  private ctx: AudioContext | null = null;
+  private master!: GainNode;
+  private engO1!: OscillatorNode;
+  private engO2!: OscillatorNode;
+  private engF!: BiquadFilterNode;
+  private engG!: GainNode;
+  private skidG!: GainNode;
+  private skidF!: BiquadFilterNode;
+  private noiseBuf!: AudioBuffer;
+  muted = false;
+
+  constructor(private enabled: boolean) {}
+
+  unlock(): void {
+    if (!this.enabled) return;
+    try {
+      if (!this.ctx) this.build();
+      void this.ctx!.resume();
+    } catch {
+      this.enabled = false;
+    }
+  }
+
+  private build(): void {
+    const ctx = (this.ctx = new AudioContext());
+    this.master = ctx.createGain();
+    this.master.gain.value = 0.55;
+    this.master.connect(ctx.destination);
+    // Ruido blanco reutilizable.
+    this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const d = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // Motor: diente de sierra + cuadrada una quinta arriba, por un paso bajo.
+    this.engO1 = ctx.createOscillator();
+    this.engO1.type = 'sawtooth';
+    this.engO2 = ctx.createOscillator();
+    this.engO2.type = 'square';
+    this.engF = ctx.createBiquadFilter();
+    this.engF.type = 'lowpass';
+    this.engF.Q.value = 2;
+    this.engG = ctx.createGain();
+    this.engG.gain.value = 0;
+    const o2g = ctx.createGain();
+    o2g.gain.value = 0.35;
+    this.engO1.connect(this.engF);
+    this.engO2.connect(o2g).connect(this.engF);
+    this.engF.connect(this.engG).connect(this.master);
+    this.engO1.start();
+    this.engO2.start();
+    // Chirrido de derrape: ruido por un paso banda.
+    const skid = ctx.createBufferSource();
+    skid.buffer = this.noiseBuf;
+    skid.loop = true;
+    this.skidF = ctx.createBiquadFilter();
+    this.skidF.type = 'bandpass';
+    this.skidF.frequency.value = 1800;
+    this.skidF.Q.value = 3;
+    this.skidG = ctx.createGain();
+    this.skidG.gain.value = 0;
+    skid.connect(this.skidF).connect(this.skidG).connect(this.master);
+    skid.start();
+  }
+
+  private get ok(): boolean {
+    return !!this.ctx && this.ctx.state === 'running' && !this.muted;
+  }
+
+  setEngine(speed01: number, throttle: number, boost: boolean, driftLevel: number, drifting: boolean, on: boolean): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const f = 48 + speed01 * 120 + (boost ? 25 : 0);
+    this.engO1.frequency.setTargetAtTime(f, t, 0.05);
+    this.engO2.frequency.setTargetAtTime(f * 1.5, t, 0.05);
+    this.engF.frequency.setTargetAtTime(500 + speed01 * 1600 + throttle * 300, t, 0.05);
+    this.engG.gain.setTargetAtTime(on && !this.muted ? 0.05 + throttle * 0.04 : 0, t, 0.08);
+    this.skidG.gain.setTargetAtTime(on && drifting && !this.muted ? 0.05 + driftLevel * 0.02 : 0, t, 0.05);
+    this.skidF.frequency.setTargetAtTime(1500 + driftLevel * 400, t, 0.05);
+  }
+
+  tone(freq: number, dur: number, type: OscillatorType = 'square', vol = 0.18, delay = 0, slideTo = 0): void {
+    if (!this.ok) return;
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + delay;
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
+  noise(dur: number, from: number, to: number, vol = 0.25, type: BiquadFilterType = 'bandpass'): void {
+    if (!this.ok) return;
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.Q.value = 1.2;
+    f.frequency.setValueAtTime(from, t);
+    f.frequency.exponentialRampToValueAtTime(to, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t, Math.random());
+    src.stop(t + dur + 0.05);
+  }
+
+  countdown(n: number): void {
+    this.tone(n > 0 ? 523 : 1046, n > 0 ? 0.18 : 0.45, 'square', 0.16);
+  }
+  boost(): void {
+    this.noise(0.6, 600, 3200, 0.28);
+    this.tone(220, 0.4, 'sawtooth', 0.06, 0, 660);
+  }
+  driftLevel(level: number): void {
+    this.tone([0, 660, 880, 1175][level] ?? 1175, 0.08, 'triangle', 0.12);
+  }
+  bump(strength: number): void {
+    this.tone(110, 0.18, 'sine', Math.min(0.35, 0.08 + strength * 0.02), 0, 45);
+    this.noise(0.12, 900, 300, 0.08, 'lowpass');
+  }
+  hop(): void {
+    this.tone(300, 0.08, 'sine', 0.06, 0, 520);
+  }
+  land(): void {
+    this.noise(0.15, 400, 120, 0.12, 'lowpass');
+  }
+  lap(final: boolean): void {
+    const notes = final ? [523, 659, 784, 1046] : [659, 880];
+    notes.forEach((f, i) => this.tone(f, 0.18, 'triangle', 0.14, i * 0.1));
+  }
+  finish(place: number): void {
+    const notes = place <= 3 ? [523, 659, 784, 1046, 784, 1046] : [392, 349, 330, 262];
+    notes.forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.16, i * 0.14));
+  }
+  click(): void {
+    this.tone(880, 0.05, 'triangle', 0.08);
+  }
+}

@@ -1,0 +1,407 @@
+// HUD y menús en DOM: posición, vuelta, tiempo, minimapa, cuenta atrás, título, pausa y resultados.
+import type { Race, CpuLevel } from '../game/race';
+import { CPU_LEVELS } from '../game/race';
+import type { Track } from '../game/track';
+import { CHARACTERS, displayName, cssColor } from '../game/characters';
+
+const CSS = `
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#hud .stroke { paint-order: stroke fill; -webkit-text-stroke: 6px #2a2050; }
+#hud-pos { position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom));
+  font-size: clamp(56px, 11vh, 104px); font-weight: 900; line-height: 1; letter-spacing: -2px; }
+#hud-pos small { font-size: 0.4em; letter-spacing: 0; }
+#hud-lap { position: absolute; left: max(18px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top));
+  font-size: clamp(22px, 4.2vh, 34px); font-weight: 900; line-height: 1.15; }
+#hud-lap .time { font-size: 0.72em; font-variant-numeric: tabular-nums; opacity: 0.95; }
+#hud-map { position: absolute; right: max(14px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top));
+  width: clamp(110px, 24vh, 190px); height: clamp(110px, 24vh, 190px); }
+#hud-msg { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-weight: 900;
+  font-size: clamp(64px, 16vh, 150px); line-height: 1; }
+#hud-msg.small { font-size: clamp(34px, 7vh, 64px); }
+#hud-msg.pop { animation: pgp-pop 0.9s cubic-bezier(.2,1.6,.4,1) both; }
+@keyframes pgp-pop { 0% { transform: scale(0.3); opacity: 0 } 25% { transform: scale(1.12); opacity: 1 } 70% { transform: scale(1); opacity: 1 } 100% { transform: scale(1.05); opacity: 0 } }
+#hud-wrong { position: absolute; left: 0; right: 0; top: 18%; text-align: center; font-size: clamp(30px, 6vh, 52px);
+  font-weight: 900; color: #ffd23a; animation: pgp-blink 0.6s steps(2) infinite; }
+@keyframes pgp-blink { 50% { opacity: 0.25 } }
+.pgp-screen { box-sizing: border-box; position: fixed; inset: 0; z-index: 10; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; pointer-events: auto;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  overflow-y: auto; }
+.pgp-screen.dim { background: rgba(30, 26, 70, 0.45); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.pgp-card { box-sizing: border-box; background: rgba(255,255,255,0.94); color: #2a2050; border-radius: 28px; padding: 22px 26px;
+  box-shadow: 0 14px 0 rgba(42,32,80,0.25), 0 30px 60px rgba(0,0,0,0.25); width: min(760px, 100%); }
+.pgp-logo { font-size: clamp(44px, 9vw, 84px); font-weight: 900; text-align: center; line-height: 1; margin: 0 0 4px;
+  paint-order: stroke fill; -webkit-text-stroke: 8px #2a2050; letter-spacing: 1px; }
+.pgp-logo span:nth-child(6n+1) { color: #e8423a } .pgp-logo span:nth-child(6n+2) { color: #2f7de0 }
+.pgp-logo span:nth-child(6n+3) { color: #3fb24a } .pgp-logo span:nth-child(6n+4) { color: #ffb52a }
+.pgp-logo span:nth-child(6n+5) { color: #8a4fd8 } .pgp-logo span:nth-child(6n) { color: #f07ab0 }
+.pgp-sub { text-align: center; font-weight: 700; color: #fff; font-size: 18px; margin-bottom: 18px; text-shadow: 0 2px 0 #2a2050; }
+.pgp-label { font-size: 13px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #6a64a0; margin: 14px 2px 8px; }
+.pgp-row { display: flex; flex-wrap: wrap; gap: 10px; border-radius: 18px; padding: 4px; outline: 3px solid transparent; }
+.pgp-row.focus { outline-color: #ffb52a; }
+.pgp-chars { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 620px) { .pgp-chars { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.pgp-char { border: 4px solid transparent; border-radius: 18px; background: #f1effa; padding: 8px 4px 6px; text-align: center; cursor: pointer;
+  font: inherit; color: inherit; display: grid; justify-items: center; gap: 4px; min-width: 0; }
+.pgp-char .face { width: 52px; height: 52px; border-radius: 18px; position: relative; box-shadow: inset 0 -7px 0 rgba(0,0,0,0.18); }
+.pgp-char .face::before, .pgp-char .face::after { content: ""; position: absolute; top: 18px; width: 10px; height: 12px; border-radius: 50%; background: #fff; box-shadow: inset 3px 2px 0 2px #1e2236; }
+.pgp-char .face::before { left: 12px } .pgp-char .face::after { right: 12px }
+.pgp-char .nm { font-weight: 900; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.pgp-char .sp { font-size: 11px; font-weight: 700; color: #6a64a0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pgp-char.sel { border-color: #2a2050; background: #fff; transform: translateY(-2px); }
+.pgp-opt { border: 3px solid #d8d4ee; background: #fff; color: #2a2050; border-radius: 999px; padding: 8px 18px; font: inherit; font-weight: 900; font-size: 17px; cursor: pointer; }
+.pgp-opt.sel { background: #2a2050; color: #fff; border-color: #2a2050; }
+.pgp-go { display: block; margin: 20px auto 4px; border: 0; border-radius: 999px; background: #3fb24a; color: #fff; font: inherit; font-weight: 900;
+  font-size: 28px; padding: 14px 44px; box-shadow: 0 7px 0 #23752c; cursor: pointer; }
+.pgp-go:active { transform: translateY(4px); box-shadow: 0 3px 0 #23752c; }
+.pgp-row.focus .pgp-go { outline: 4px solid #ffb52a; outline-offset: 4px; }
+.pgp-hint { text-align: center; font-size: 13px; color: #6a64a0; margin-top: 10px; font-weight: 700; }
+.pgp-results h2 { margin: 0 0 12px; text-align: center; font-size: 34px; }
+.pgp-results table { width: 100%; border-collapse: collapse; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pgp-results td { padding: 7px 8px; border-bottom: 2px solid #ece9f7; }
+.pgp-results tr.me td { background: #fff4c8; }
+.pgp-results .dot { display: inline-block; width: 16px; height: 16px; border-radius: 6px; vertical-align: -2px; margin-right: 8px; }
+.pgp-results .btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+.pgp-results .btns .pgp-go { margin: 0; font-size: 22px; padding: 12px 30px; }
+.pgp-results .btns .alt { background: #2f7de0; box-shadow: 0 7px 0 #1d5aa8; }
+.pgp-results .btns .pgp-go.focus { outline: 4px solid #ffb52a; outline-offset: 4px; }
+.pgp-opts { display: flex; flex-wrap: wrap; gap: 4px 28px; }
+@media (max-height: 520px) {
+  .pgp-logo { font-size: 38px; -webkit-text-stroke: 5px #2a2050; }
+  .pgp-sub, .pgp-hint, .pgp-char .sp { display: none; }
+  .pgp-screen { place-items: start center; }
+  .pgp-card { padding: 10px 16px 14px; border-radius: 22px; }
+  .pgp-label { margin: 6px 2px 4px; font-size: 11px; }
+  .pgp-char { padding: 5px 2px 4px; border-width: 3px; }
+  .pgp-char .face { width: 34px; height: 34px; border-radius: 12px; }
+  .pgp-char .face::before, .pgp-char .face::after { top: 11px; width: 7px; height: 8px; }
+  .pgp-char .face::before { left: 7px } .pgp-char .face::after { right: 7px }
+  .pgp-char .nm { font-size: 13px; }
+  .pgp-opt { padding: 5px 14px; font-size: 15px; }
+  .pgp-go { font-size: 22px; padding: 8px 32px; margin: 10px auto 0; }
+}
+#pgp-bench { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; background: rgba(20,18,50,.9); color: #fff;
+  font: 600 14px/1.5 ui-monospace, Menlo, monospace; padding: 10px 14px; border-radius: 12px; white-space: pre; pointer-events: none; }
+`;
+
+export interface TitleSetup {
+  charIndex: number;
+  cpu: CpuLevel;
+  laps: number;
+}
+
+const ordinal = (n: number): string => `${n}º`;
+const fmtTime = (t: number): string => {
+  const m = Math.floor(t / 60);
+  const s = t - m * 60;
+  return `${m}:${s.toFixed(2).padStart(5, '0')}`;
+};
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html) e.innerHTML = html;
+  return e;
+}
+
+export class Hud {
+  private root = el('div');
+  private pos = el('div', 'stroke');
+  private lap = el('div', 'stroke');
+  private msg = el('div', 'stroke');
+  private wrong = el('div', 'stroke', '¡Al revés! ↺');
+  private map = el('canvas');
+  private mapCtx: CanvasRenderingContext2D;
+  private mapPath: Path2D | null = null;
+  private mapXf = { s: 1, ox: 0, oz: 0 };
+  private screen: HTMLElement | null = null;
+  private menuRows: { el: HTMLElement; left?: () => void; right?: () => void; ok?: () => void }[] = [];
+  private focus = 0;
+  private lastLapHtml = '';
+  private benchEl: HTMLElement | null = null;
+
+  constructor() {
+    const style = el('style');
+    style.textContent = CSS;
+    document.head.append(style);
+    this.root.id = 'hud';
+    this.pos.id = 'hud-pos';
+    this.lap.id = 'hud-lap';
+    this.msg.id = 'hud-msg';
+    this.wrong.id = 'hud-wrong';
+    this.map.id = 'hud-map';
+    this.map.width = this.map.height = 380;
+    this.mapCtx = this.map.getContext('2d')!;
+    this.root.append(this.pos, this.lap, this.map, this.msg, this.wrong);
+    document.body.append(this.root);
+    this.setRaceVisible(false);
+  }
+
+  setRaceVisible(v: boolean): void {
+    for (const e of [this.pos, this.lap, this.map]) e.style.display = v ? '' : 'none';
+    if (!v) this.wrong.style.display = 'none';
+  }
+
+  setTrack(track: Track): void {
+    const b = track.bounds;
+    const pad = 22;
+    const size = this.map.width - pad * 2;
+    const s = size / Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
+    // Vista desde arriba con la salida abajo: x de pantalla = −x del mundo (la derecha del jugador queda a la derecha).
+    this.mapXf = { s, ox: pad + (size + (b.maxX - b.minX) * s) / 2 + b.minX * s, oz: pad + (size - (b.maxZ - b.minZ) * s) / 2 - b.minZ * s };
+    const p = new Path2D();
+    track.samples.forEach((sm, i) => {
+      const [x, y] = this.mapPt(sm.x, sm.z);
+      if (i === 0) p.moveTo(x, y);
+      else p.lineTo(x, y);
+    });
+    p.closePath();
+    this.mapPath = p;
+  }
+
+  private mapPt(x: number, z: number): [number, number] {
+    return [this.mapXf.ox - x * this.mapXf.s, this.map.height - (this.mapXf.oz + z * this.mapXf.s)];
+  }
+
+  /** Mensaje grande animado en el centro. */
+  flash(text: string, small = false, color = '#ffffff'): void {
+    const m = this.msg;
+    m.textContent = text;
+    m.style.color = color;
+    m.className = `stroke${small ? ' small' : ''}`;
+    void m.offsetWidth;
+    m.classList.add('pop');
+  }
+
+  update(race: Race): void {
+    const p = race.player;
+    const total = race.karts.length;
+    this.pos.innerHTML = `${ordinal(p.position)}<small>/${total}</small>`;
+    this.pos.style.color = ['#ffd23a', '#e6e9f2', '#f0a36a'][p.position - 1] ?? '#ffffff';
+    const lap = Math.max(1, Math.min(race.laps, p.lap));
+    const html = `Vuelta ${lap}/${race.laps}<br><span class="time">${fmtTime(p.finished ? p.finishTime : race.time)}</span>`;
+    if (html !== this.lastLapHtml) this.lap.innerHTML = this.lastLapHtml = html;
+    this.wrong.style.display = p.wrongWayT > 1 && !p.finished && race.phase === 'racing' ? '' : 'none';
+    this.drawMap(race);
+  }
+
+  private drawMap(race: Race): void {
+    const g = this.mapCtx;
+    const W = this.map.width;
+    g.clearRect(0, 0, W, W);
+    if (!this.mapPath) return;
+    g.lineJoin = 'round';
+    g.lineWidth = 30;
+    g.strokeStyle = 'rgba(42,32,80,0.75)';
+    g.stroke(this.mapPath);
+    g.lineWidth = 18;
+    g.strokeStyle = 'rgba(255,255,255,0.92)';
+    g.stroke(this.mapPath);
+    const order = [...race.karts].sort((a, b) => (a.isPlayer ? 1 : 0) - (b.isPlayer ? 1 : 0));
+    for (const k of order) {
+      const [x, y] = this.mapPt(k.pos.x, k.pos.z);
+      g.beginPath();
+      g.arc(x, y, k.isPlayer ? 15 : 11, 0, Math.PI * 2);
+      g.fillStyle = cssColor(k.char.kart);
+      g.fill();
+      g.lineWidth = k.isPlayer ? 6 : 4;
+      g.strokeStyle = k.isPlayer ? '#ffd23a' : '#2a2050';
+      g.stroke();
+    }
+  }
+
+  // ---------------- Pantallas ----------------
+
+  private openScreen(card: HTMLElement, dim: boolean): void {
+    this.closeScreen();
+    const s = el('div', `pgp-screen${dim ? ' dim' : ''}`);
+    s.append(card);
+    document.body.append(s);
+    this.screen = s;
+  }
+
+  closeScreen(): void {
+    this.screen?.remove();
+    this.screen = null;
+    this.menuRows = [];
+  }
+
+  get menuOpen(): boolean {
+    return !!this.screen;
+  }
+
+  /** Navegación de menús con teclado o mando. */
+  menuInput(keys: string[]): void {
+    if (!this.menuRows.length) return;
+    for (const k of keys) {
+      const row = this.menuRows[this.focus];
+      if (k === 'up') this.focus = Math.max(0, this.focus - 1);
+      else if (k === 'down') this.focus = Math.min(this.menuRows.length - 1, this.focus + 1);
+      else if (k === 'left') row.left?.();
+      else if (k === 'right') row.right?.();
+      else if (k === 'ok') (row.ok ?? this.menuRows[this.menuRows.length - 1].ok)?.();
+      this.menuRows.forEach((r, i) => r.el.classList.toggle('focus', i === this.focus));
+    }
+  }
+
+  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void): void {
+    const wrap = el('div');
+    wrap.style.width = 'min(760px, 100%)';
+    const logo = el('div', 'pgp-logo');
+    logo.innerHTML = [...'Peluches GP'].map((c) => `<span>${c === ' ' ? '&nbsp;' : c}</span>`).join('');
+    const sub = el('div', 'pgp-sub', 'Carreras en el cuarto de juegos');
+    const card = el('div', 'pgp-card');
+    wrap.append(logo, sub, card);
+
+    card.append(el('div', 'pgp-label', 'Elige tu peluche'));
+    const charRow = el('div', 'pgp-row');
+    const chars = el('div', 'pgp-chars');
+    chars.style.width = '100%';
+    charRow.append(chars);
+    const charBtns = CHARACTERS.map((c, i) => {
+      const b = el('button', 'pgp-char');
+      b.innerHTML = `<div class="face" style="background:${cssColor(c.color)}"></div><div class="nm">${displayName(c)}</div><div class="sp">${c.label}</div>`;
+      b.onclick = () => setChar(i);
+      chars.append(b);
+      return b;
+    });
+    card.append(charRow);
+
+    const opts = el('div', 'pgp-opts');
+    const cpuCol = el('div');
+    const lapCol = el('div');
+    opts.append(cpuCol, lapCol);
+    card.append(opts);
+    cpuCol.append(el('div', 'pgp-label', 'Rivales'));
+    const cpuRow = el('div', 'pgp-row');
+    const cpuBtns = CPU_LEVELS.map((lv) => {
+      const b = el('button', 'pgp-opt', lv.label);
+      b.onclick = () => setCpu(lv);
+      cpuRow.append(b);
+      return b;
+    });
+    cpuCol.append(cpuRow);
+
+    lapCol.append(el('div', 'pgp-label', 'Vueltas'));
+    const lapRow = el('div', 'pgp-row');
+    const lapBtns = [2, 3].map((n) => {
+      const b = el('button', 'pgp-opt', String(n));
+      b.onclick = () => setLaps(n);
+      lapRow.append(b);
+      return b;
+    });
+    lapCol.append(lapRow);
+
+    const goRow = el('div', 'pgp-row');
+    goRow.style.justifyContent = 'center';
+    const go = el('button', 'pgp-go', '¡A correr!');
+    go.onclick = () => onStart();
+    goRow.append(go);
+    card.append(goRow);
+    card.append(el('div', 'pgp-hint', 'Teclado: flechas para manejar · Espacio derrapa · Esc pausa &nbsp;|&nbsp; Mando: B acelera · A frena · R derrapa'));
+
+    const s = { ...setup };
+    const refresh = (): void => {
+      charBtns.forEach((b, i) => b.classList.toggle('sel', i === s.charIndex));
+      cpuBtns.forEach((b, i) => b.classList.toggle('sel', CPU_LEVELS[i].id === s.cpu.id));
+      lapBtns.forEach((b, i) => b.classList.toggle('sel', [2, 3][i] === s.laps));
+    };
+    const setChar = (i: number): void => {
+      s.charIndex = (i + CHARACTERS.length) % CHARACTERS.length;
+      refresh();
+      onChange({ ...s });
+    };
+    const setCpu = (lv: CpuLevel): void => {
+      s.cpu = lv;
+      refresh();
+      onChange({ ...s });
+    };
+    const setLaps = (n: number): void => {
+      s.laps = n;
+      refresh();
+      onChange({ ...s });
+    };
+    refresh();
+    this.openScreen(wrap, false);
+    const cpuIdx = (): number => CPU_LEVELS.findIndex((l) => l.id === s.cpu.id);
+    this.menuRows = [
+      { el: charRow, left: () => setChar(s.charIndex - 1), right: () => setChar(s.charIndex + 1) },
+      { el: cpuRow, left: () => setCpu(CPU_LEVELS[Math.max(0, cpuIdx() - 1)]), right: () => setCpu(CPU_LEVELS[Math.min(CPU_LEVELS.length - 1, cpuIdx() + 1)]) },
+      { el: lapRow, left: () => setLaps(2), right: () => setLaps(3) },
+      { el: goRow, ok: onStart },
+    ];
+    this.focus = 0;
+    this.menuInput([]);
+    charRow.classList.add('focus');
+  }
+
+  showPause(onResume: () => void, onRestart: () => void, onMenu: () => void): void {
+    const card = el('div', 'pgp-card pgp-results');
+    card.style.width = 'min(420px, 100%)';
+    card.append(el('h2', '', 'Pausa'));
+    const btns = el('div', 'btns');
+    btns.style.flexDirection = 'column';
+    btns.style.alignItems = 'center';
+    const mk = (t: string, cls: string, fn: () => void): HTMLButtonElement => {
+      const b = el('button', `pgp-go ${cls}`, t);
+      b.onclick = fn;
+      btns.append(b);
+      return b;
+    };
+    const a = mk('Seguir', '', onResume);
+    const b = mk('Empezar de nuevo', 'alt', onRestart);
+    const c = mk('Menú', 'alt', onMenu);
+    card.append(btns);
+    this.openScreen(card, true);
+    this.menuRows = [a, b, c].map((e, i) => ({ el: e, ok: [onResume, onRestart, onMenu][i] }));
+    this.focus = 0;
+    this.menuInput([]);
+  }
+
+  showResults(race: Race, onAgain: () => void, onMenu: () => void): void {
+    const card = el('div', 'pgp-card pgp-results');
+    card.style.width = 'min(560px, 100%)';
+    const p = race.player;
+    const title = p.place === 1 ? '¡Ganaste! 🏆' : p.place <= 3 ? `¡${ordinal(p.place)} lugar! 🎉` : `Llegaste ${ordinal(p.place)}`;
+    card.append(el('h2', '', title));
+    const table = el('table');
+    card.append(table);
+    const btns = el('div', 'btns');
+    const again = el('button', 'pgp-go', 'Otra carrera');
+    again.onclick = onAgain;
+    const menu = el('button', 'pgp-go alt', 'Menú');
+    menu.onclick = onMenu;
+    btns.append(again, menu);
+    card.append(btns);
+    this.openScreen(card, true);
+    this.menuRows = [
+      { el: again, ok: onAgain, right: () => this.menuInput(['down']), left: () => this.menuInput(['up']) },
+      { el: menu, ok: onMenu, right: () => this.menuInput(['down']), left: () => this.menuInput(['up']) },
+    ];
+    this.focus = 0;
+    this.menuInput([]);
+    this.resultsTable = table;
+    this.refreshResults(race);
+  }
+
+  private resultsTable: HTMLTableElement | null = null;
+
+  refreshResults(race: Race): void {
+    if (!this.resultsTable) return;
+    this.resultsTable.innerHTML = race.order
+      .map(
+        (k) => `<tr class="${k.isPlayer ? 'me' : ''}"><td>${k.finished ? ordinal(k.place) : '…'}</td>
+        <td><span class="dot" style="background:${cssColor(k.char.kart)}"></span>${displayName(k.char)}${k.isPlayer ? ' (tú)' : ''}</td>
+        <td style="text-align:right">${k.finished ? fmtTime(k.finishTime) : 'en carrera'}</td></tr>`,
+      )
+      .join('');
+  }
+
+  bench(text: string): void {
+    if (!this.benchEl) {
+      this.benchEl = el('div');
+      this.benchEl.id = 'pgp-bench';
+      document.body.append(this.benchEl);
+    }
+    this.benchEl.textContent = text;
+  }
+}
