@@ -24,6 +24,11 @@ import { Hud, type TitleSetup } from './ui/hud';
 import { Arena } from './game/arena';
 import { PlushMaterials } from './game/plush';
 import { displayName } from './game/characters';
+import { loadSettings, saveSettings, applyProfile } from './core/settings';
+import { Gyro } from './input/gyro';
+import { TouchControls, isTouchDevice } from './input/touch';
+import { Voice } from './audio/voice';
+import { openSettings } from './ui/settings';
 
 installErrorHooks();
 
@@ -74,15 +79,50 @@ resize();
 type Mode = 'title' | 'race' | 'paused' | 'results';
 let mode: Mode = 'title';
 let titleT = 0;
+const settings = loadSettings();
 const charFromParam = CHARACTERS.findIndex((c) => c.id === params.char || c.defaultName.toLowerCase() === params.char?.toLowerCase());
+if (charFromParam >= 0) settings.charIndex = charFromParam;
+if (params.cpu === 'facil' || params.cpu === 'normal' || params.cpu === 'dificil') settings.cpu = params.cpu;
+if (params.laps) settings.laps = params.laps;
+if (params.profile === 'normal' || params.profile === 'peque') applyProfile(settings, params.profile);
 const setup: TitleSetup = {
-  charIndex: charFromParam >= 0 ? charFromParam : 3,
-  cpu: CPU_LEVELS.find((l) => l.id === params.cpu) ?? CPU_LEVELS[0],
-  laps: params.laps ?? 3,
+  charIndex: settings.charIndex,
+  cpu: CPU_LEVELS.find((l) => l.id === settings.cpu) ?? CPU_LEVELS[0],
+  laps: settings.laps,
 };
 let race: Race;
 let karts: Kart[] = [];
 let resultsShownAt = -1;
+
+const gyro = new Gyro();
+const voice = new Voice();
+const touchOn = isTouchDevice();
+hud.touchMode = isTouchDevice();
+const touch = new TouchControls(gyro, () => {
+  if (mode === 'race') pause();
+});
+
+/** Lleva los ajustes guardados a los sistemas que los usan. */
+function applySettings(): void {
+  gyro.sens = settings.gyroSens;
+  gyro.invert = settings.gyroInvert;
+  voice.enabled = settings.voice && !params.noaudio;
+  touch.configure(settings);
+  if (race) {
+    race.assist = { autoAccel: settings.autoAccel, smartSteer: settings.smartSteer };
+    race.autoPower = settings.autoPower;
+    const p = karts[0];
+    p.hitScale = settings.profile === 'peque' ? 0.85 : 1;
+    p.driftChargeMult = settings.smartSteer ? 0.8 : 1;
+  }
+}
+
+function storeSetup(): void {
+  settings.charIndex = setup.charIndex;
+  settings.cpu = setup.cpu.id;
+  settings.laps = setup.laps;
+  saveSettings(settings);
+}
 
 function buildRace(): void {
   for (const k of karts) scene.remove(k.model.root);
@@ -96,7 +136,34 @@ function buildRace(): void {
   });
   const ais = karts.map((_, i) => new AIDriver(aiRng.fork(`p${i}`), i === 0 ? 0.8 : setup.cpu.driftSkill));
   race = new Race(karts, ais, setup.laps, setup.cpu, params.autoplay, aiRng.fork('carrera'), arena);
+  applySettings();
   chase.reset();
+}
+
+function titleStatus(): string {
+  const parts = [settings.profile === 'peque' ? 'Perfil Peque' : 'Perfil Normal'];
+  if (settings.autoAccel || settings.smartSteer) parts.push('ayuda de manejo activada');
+  if (touchOn) parts.push(settings.steerMode === 'giro' ? 'volante: giroscopio' : 'volante: botones');
+  return parts.join(' · ');
+}
+
+let closeSettings: (() => void) | null = null;
+function showSettings(after: () => void): void {
+  closeSettings = openSettings({
+    settings,
+    gyro,
+    padInfo: () => input.padInfo(),
+    onChange: () => {
+      saveSettings(settings);
+      const lv = CPU_LEVELS.find((l) => l.id === settings.cpu);
+      if (lv && mode === 'title') setup.cpu = lv;
+      applySettings();
+    },
+    onClose: () => {
+      closeSettings = null;
+      after();
+    },
+  });
 }
 
 function showTitle(): void {
@@ -104,41 +171,61 @@ function showTitle(): void {
   loop.fpsLimit = params.fps ?? 30;
   buildRace();
   hud.setRaceVisible(false);
+  touch.show(false);
   hud.showTitle(
     setup,
     (s) => {
       const charChanged = s.charIndex !== setup.charIndex;
       Object.assign(setup, s);
+      storeSetup();
       if (charChanged) buildRace();
       audio.click();
     },
     startRace,
+    () => showSettings(showTitle),
+    titleStatus(),
   );
 }
 
 function startRace(): void {
   audio.unlock();
+  if (touchOn) {
+    // En el teléfono: pantalla completa y horizontal donde el navegador lo permita (no en iPhone).
+    const de = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+    if (!document.fullscreenElement && de.requestFullscreen) {
+      de.requestFullscreen()
+        .then(() => (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape'))
+        .catch(() => {});
+    }
+    if (settings.steerMode === 'giro' && !gyro.active) void gyro.enable();
+  }
   hud.closeScreen();
   buildRace();
   mode = 'race';
   loop.fpsLimit = params.fps ?? 60;
   dynRes.targetMs = 1000 / (loop.fpsLimit || 60);
   hud.setRaceVisible(true);
+  touch.show(touchOn);
   resultsShownAt = -1;
   race.start();
+  // La posición en que sostiene el teléfono al empezar cuenta como "recto".
+  setTimeout(() => gyro.calibrate(), 600);
 }
 
 function pause(): void {
   if (mode !== 'race') return;
   mode = 'paused';
-  hud.showPause(
-    () => {
-      hud.closeScreen();
-      mode = 'race';
-    },
-    startRace,
-    showTitle,
-  );
+  touch.show(false);
+  const resume = (): void => {
+    hud.closeScreen();
+    mode = 'race';
+    touch.show(touchOn);
+  };
+  hud.showPause(resume, startRace, showTitle, () => showSettings(pause2));
+  function pause2(): void {
+    mode = 'race';
+    pause();
+  }
 }
 
 // ---------------- Eventos → audio, cámara, efectos ----------------
@@ -146,16 +233,19 @@ function pause(): void {
 bus.on('race:countdown', ({ n }) => {
   hud.flash(String(n));
   audio.countdown(n);
+  voice.say(['', 'uno', 'dos', 'tres'][n]);
 });
 bus.on('race:go', () => {
   hud.flash('¡Ya!', false, '#ffd23a');
   audio.countdown(0);
+  voice.say('¡Ya!');
 });
 bus.on('kart:lap', ({ kart, lap }) => {
   if (kart !== 0 || !race) return;
   if (lap === race.laps) {
     hud.flash('¡Última vuelta!', true, '#ffd23a');
     audio.lap(true);
+    voice.say('¡Última vuelta!');
   } else if (lap > 1 && lap <= race.laps) {
     hud.flash(`Vuelta ${lap}`, true);
     audio.lap(false);
@@ -165,6 +255,7 @@ bus.on('kart:finish', ({ kart, place }) => {
   if (kart !== 0) return;
   hud.flash(place === 1 ? '¡Ganaste!' : '¡Meta!', false, '#ffd23a');
   audio.finish(place);
+  voice.say(place === 1 ? '¡Ganaste!' : `¡Llegaste en el lugar ${place}!`);
   input.rumble(0.6, 0.6, 400);
 });
 bus.on('kart:boost', ({ kart }) => {
@@ -354,15 +445,19 @@ function benchFrame(intervalMs: number): void {
 function frame(dt: number): void {
   dynRes.sample(loop.lastIntervalMs, dt);
   const ctl = input.read();
+  if (mode === 'race') touch.merge(ctl, dt, karts[0].power >= 1);
   if (input.consumePause()) {
     if (mode === 'race') pause();
-    else if (mode === 'paused') {
+    else if (mode === 'paused' && !closeSettings) {
       hud.closeScreen();
       mode = 'race';
+      touch.show(touchOn);
     }
   }
   const menuKeys = input.consumeMenu();
-  if (hud.menuOpen) hud.menuInput(menuKeys);
+  if (closeSettings) {
+    if (menuKeys.includes('back')) closeSettings();
+  } else if (hud.menuOpen) hud.menuInput(menuKeys);
 
   if (mode === 'title') {
     titleT += dt;
@@ -374,6 +469,7 @@ function frame(dt: number): void {
       if (resultsShownAt < 0 && race.time - race.doneAt > 2.5) {
         resultsShownAt = race.time;
         mode = 'results';
+        touch.show(false);
         hud.showResults(race, startRace, showTitle);
       } else if (resultsShownAt >= 0) hud.refreshResults(race);
     }
@@ -430,6 +526,10 @@ window.__game = {
   renderer,
   scene,
   bus,
+  settings,
+  gyro,
+  touch,
+  applySettings,
   arena,
   quality,
   dynRes,

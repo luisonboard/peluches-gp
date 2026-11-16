@@ -15,6 +15,11 @@ export type MenuKey = 'left' | 'right' | 'up' | 'down' | 'ok' | 'back';
 
 const PREVENT = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
 const DEAD = 0.15;
+/** Mientras se escribe un nombre, las teclas no manejan el kart. */
+const isTyping = (e: Event): boolean => {
+  const t = e.target as HTMLElement | null;
+  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');
+};
 
 export class Input {
   private keys = new Set<string>();
@@ -31,6 +36,7 @@ export class Input {
     addEventListener(
       'keydown',
       (e) => {
+        if (isTyping(e)) return;
         if (PREVENT.has(e.code)) e.preventDefault();
         this.touch();
         if (!e.repeat) {
@@ -43,6 +49,9 @@ export class Input {
       { passive: false },
     );
     addEventListener('keyup', (e) => this.keys.delete(e.code));
+    addEventListener('focusin', (e) => {
+      if (isTyping(e)) this.keys.clear();
+    });
     addEventListener('blur', () => this.keys.clear());
     addEventListener('pointerdown', () => this.touch());
   }
@@ -98,6 +107,19 @@ export class Input {
       break; // un solo mando por dispositivo en el hito 1
     }
     return { steer: Math.max(-1, Math.min(1, steer)), throttle, brake, drift, item, power };
+  }
+
+  /** Mando conectado y botones pulsados (para la prueba del mando en Ajustes). */
+  padInfo(): string {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (const p of pads) {
+      if (!p || !p.connected) continue;
+      const names = ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '↑', '↓', '←', '→'];
+      const on = p.buttons.map((b, i) => (b.pressed ? names[i] ?? `#${i}` : '')).filter(Boolean);
+      const ax = Math.abs(p.axes[0] ?? 0) > 0.15 ? ` · palanca ${(p.axes[0] * 100).toFixed(0)}%` : '';
+      return `${p.id.replace(/\(.*?\)/g, '').trim().slice(0, 40)} — ${on.length ? on.join(' ') : 'pulsa un botón'}${ax}`;
+    }
+    return 'Ningún mando conectado (conéctalo y pulsa un botón)';
   }
 
   consumePause(): boolean {

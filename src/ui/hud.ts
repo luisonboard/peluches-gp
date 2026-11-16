@@ -155,6 +155,8 @@ export class Hud {
   private flashEl = el('div');
   private toastEl = el('div', 'stroke');
   private shownItem = '';
+  /** En pantallas táctiles no se muestran las teclas. */
+  touchMode = false;
   private rouletteIdx = 0;
 
   constructor() {
@@ -260,7 +262,7 @@ export class Hud {
     this.powerFill.style.background = cssColor(p.char.color);
     const ready = p.power >= 1;
     this.powerBar.classList.toggle('ready', ready);
-    const lbl = ready ? `¡${p.char.power}! (E · X)` : p.char.power;
+    const lbl = ready ? (this.touchMode ? `¡${p.char.power}!` : `¡${p.char.power}! (E · X)`) : p.char.power;
     if (this.powerLbl.textContent !== lbl) this.powerLbl.textContent = lbl;
   }
 
@@ -336,7 +338,7 @@ export class Hud {
     }
   }
 
-  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void): void {
+  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string): void {
     const wrap = el('div');
     wrap.style.width = 'min(760px, 100%)';
     const logo = el('div', 'pgp-logo');
@@ -388,10 +390,18 @@ export class Hud {
 
     const goRow = el('div', 'pgp-row');
     goRow.style.justifyContent = 'center';
+    goRow.style.gap = '12px';
+    goRow.style.alignItems = 'center';
     const go = el('button', 'pgp-go', '¡A correr!');
     go.onclick = () => onStart();
-    goRow.append(go);
+    go.style.margin = '0';
+    const gear = el('button', 'pgp-go', '⚙ Ajustes');
+    gear.style.cssText = 'margin:0;background:#2f7de0;box-shadow:0 7px 0 #1d5aa8;font-size:20px;padding:12px 22px';
+    gear.onclick = () => onSettings();
+    goRow.append(go, gear);
+    goRow.style.marginTop = '18px';
     card.append(goRow);
+    card.append(el('div', 'pgp-hint', status));
     card.append(el('div', 'pgp-hint', 'Teclado: flechas · Espacio derrapa · Shift objeto · E poder &nbsp;|&nbsp; Mando: B acelera · A frena · R derrapa · L objeto · X poder'));
 
     const s = { ...setup };
@@ -424,14 +434,14 @@ export class Hud {
       { el: charRow, left: () => setChar(s.charIndex - 1), right: () => setChar(s.charIndex + 1) },
       { el: cpuRow, left: () => setCpu(CPU_LEVELS[Math.max(0, cpuIdx() - 1)]), right: () => setCpu(CPU_LEVELS[Math.min(CPU_LEVELS.length - 1, cpuIdx() + 1)]) },
       { el: lapRow, left: () => setLaps(2), right: () => setLaps(3) },
-      { el: goRow, ok: onStart },
+      { el: goRow, ok: onStart, right: onSettings },
     ];
     this.focus = 0;
     this.menuInput([]);
     charRow.classList.add('focus');
   }
 
-  showPause(onResume: () => void, onRestart: () => void, onMenu: () => void): void {
+  showPause(onResume: () => void, onRestart: () => void, onMenu: () => void, onSettings: () => void): void {
     const card = el('div', 'pgp-card pgp-results');
     card.style.width = 'min(420px, 100%)';
     card.append(el('h2', '', 'Pausa'));
@@ -446,10 +456,11 @@ export class Hud {
     };
     const a = mk('Seguir', '', onResume);
     const b = mk('Empezar de nuevo', 'alt', onRestart);
+    const d = mk('Ajustes', 'alt', onSettings);
     const c = mk('Menú', 'alt', onMenu);
     card.append(btns);
     this.openScreen(card, true);
-    this.menuRows = [a, b, c].map((e, i) => ({ el: e, ok: [onResume, onRestart, onMenu][i] }));
+    this.menuRows = [a, b, d, c].map((e, i) => ({ el: e, ok: [onResume, onRestart, onSettings, onMenu][i] }));
     this.focus = 0;
     this.menuInput([]);
   }

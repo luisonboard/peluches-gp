@@ -8,6 +8,7 @@ Plan completo: [`PLAN.md`](PLAN.md) · página del plan: https://claude.ai/artif
 ```sh
 npm install
 npm run dev        # http://127.0.0.1:5174
+npm run dev:lan    # https://<IP-del-Mac>:5175 en la red local (para probar en el teléfono: giroscopio y mandos piden HTTPS)
 npm run build      # dist/index.html (un único archivo)
 npm run typecheck
 ```
@@ -23,6 +24,10 @@ npm run typecheck
 | Usar objeto | Shift / K | L, ZL o Y |
 | Poder del peluche (barra llena) | E / L | X |
 | Pausa | Esc / P | + |
+
+En el teléfono aparecen botones táctiles (en horizontal): ◀ ▶ o volante por giroscopio, Frenar, Derrapar y Objeto/Poder
+(en el perfil Peque, un solo botón "¡Usar!"). Ajustes (⚙ en el título o en la pausa): perfil, ayuda de manejo, voz,
+volante, nombres de los peluches y prueba del mando.
 | Menús | Flechas + Enter | Palanca/cruceta + B |
 
 **Turbo de salida**: acelera durante el último segundo de la cuenta atrás (ni antes ni después).
@@ -44,6 +49,8 @@ npm run typecheck
 | `?cam=top` | Vista cenital de toda la pista |
 | `?cam=free` | Cámara quieta, para moverla desde DevTools (`__game.camera`) |
 | `?seed=texto` | Semilla de lo procedural |
+| `?perfil=peque\|normal` | Aplica un perfil al cargar |
+| `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?noaudio` | Sin audio |
 
 Errores en `window.__errors`; estado en `window.__game` (por ejemplo, `__game.TUNING` para ajustar la física en vivo).
@@ -86,6 +93,24 @@ Errores en `window.__errors`; estado en `window.__game` (por ejemplo, `__game.TU
   rectas…). En Fácil reacciona más tarde y no usa poderes en la primera vuelta.
 - HUD con casilla de objeto, barra de poder que brilla al llenarse, avisos ("¡Chicle! Dino te dio"), destello del
   rayo, sonidos de cada poder y objeto (bajan con la distancia) y vibración del mando.
+
+**Hito 3 — controles para todos** (terminado):
+
+- Ajustes guardados en el dispositivo, con dos perfiles. **Peque** (por defecto): aceleración automática, dirección
+  asistida, poder automático, voz, rivales en Fácil y golpes un 15 % más cortos. **Normal**: todo manual.
+- **Dirección asistida**: mira la pista por delante y corrige si el kart va a salirse; si el niño no gira, conduce
+  sola; si gira, manda él salvo cerca de la barrera, que además está "acolchada". Estrella guía detrás del kart y
+  miniturbo un 20 % más lento. Con aceleración automática, el turbo de salida llega solo.
+- **Giroscopio como volante** (`devicemotion`, gravedad en el plano de la pantalla, según la orientación):
+  calibración al empezar cada carrera y con el botón Centrar, zona muerta de 4°, sensibilidad 20°/30°/42°,
+  opción Invertir y permiso para el iPhone.
+- **Botones táctiles** multitáctiles, aviso para girar el teléfono, pantalla completa y bloqueo en horizontal
+  (donde el navegador lo permite).
+- **Nombres editables** (hasta 12 letras) y **prueba del mando** en Ajustes; voz en español con la síntesis del sistema.
+
+Comprobado con `?autostart&perfil=peque` y sin tocar nada: 3 vueltas, 0 choques contra las barreras, 0 % fuera del
+asfalto. Manteniendo la derecha o girando al azar: 0 choques. Giroscopio simulado: inclinar 15° = medio giro,
+30° = giro completo, hacia el lado correcto.
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

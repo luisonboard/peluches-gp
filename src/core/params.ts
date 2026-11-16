@@ -19,4 +19,5 @@ export const params = {
   char: q.get('char'),
   cam: q.get('cam'),
   debug: q.has('debug'),
+  profile: q.get('perfil'),
 };

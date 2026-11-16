@@ -38,6 +38,7 @@ export interface KartPose {
   blinkT: number;
   finished: boolean;
   fireT: number;
+  assisted: boolean;
 }
 
 export class KartModel {
@@ -51,6 +52,7 @@ export class KartModel {
   private readonly bubble: THREE.Mesh;
   private readonly lift = new THREE.Group();
   private cheer = 0;
+  private star: THREE.Mesh | null = null;
   private t = Math.random() * 10;
   private pitch = 0;
   private roll = 0;
@@ -109,6 +111,7 @@ export class KartModel {
       mat('bubble', () => new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.05, transparent: true, opacity: 0.32, iridescence: 1, iridescenceIOR: 1.6, depthWrite: false })),
     );
     this.bubble.position.y = 1.1;
+    // Estrella guía de la dirección asistida (solo se crea si se usa).
     this.bubble.visible = false;
     this.lift.add(this.bubble);
     if (blobTex) {
@@ -138,6 +141,27 @@ export class KartModel {
     // Parpadeo mientras dura la invulnerabilidad tras un golpe.
     r.visible = !(k.invulnT > 0 && k.hitT <= 0 && k.fireT <= 0 && Math.floor(k.blinkT * 14) % 2 === 1);
     this.cheer += ((k.finished ? 1 : 0) - this.cheer) * Math.min(1, dt * 3);
+    if (k.assisted && !this.star) {
+      const shape = new THREE.Shape();
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+        const rr = i % 2 ? 0.16 : 0.38;
+        if (i === 0) shape.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        else shape.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      this.star = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(shape, { depth: 0.1, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.04, bevelSegments: 2 }),
+        new THREE.MeshBasicMaterial({ color: 0xffd84a, toneMapped: false }),
+      );
+      this.star.position.set(0, 1.5, -2.1);
+      this.lift.add(this.star);
+    }
+    if (this.star) {
+      this.star.visible = k.assisted;
+      this.star.rotation.y = this.t * 2.5;
+      this.star.position.y = 1.5 + Math.sin(this.t * 3) * 0.12;
+      this.star.scale.setScalar(1 + Math.sin(this.t * 6) * 0.1);
+    }
     this.plush.update({ steerS: k.steerS, speed: k.speed, t: this.t, cheer: this.cheer, hurt: k.hitT > 0 && k.hitKind !== 'stuck' ? 1 : 0 });
     const targetPitch = k.grounded ? -Math.atan(k.slope) : -Math.atan2(k.vy, Math.max(8, Math.abs(k.speed))) * 0.6;
     this.pitch += (targetPitch - this.pitch) * Math.min(1, dt * 10);

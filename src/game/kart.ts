@@ -104,6 +104,10 @@ export class Kart {
   stompPending = false;
   /** Multiplicador de la duración de los golpes (perfil "Peque": menos de 1). */
   hitScale = 1;
+  /** Carga del miniturbo (la dirección asistida la hace más lenta). */
+  driftChargeMult = 1;
+  /** La dirección asistida está activa (muestra la estrella guía). */
+  assisted = false;
   /** Ángulo visual del trompo. */
   spinVisual = 0;
   bubbleLift = 0;
@@ -216,7 +220,7 @@ export class Kart {
     else if (this.drift !== 0 && this.speed < T.driftMinSpeed * 0.7) this.endDrift(false);
     if (this.drift !== 0 && this.grounded) {
       const into = Math.max(0, this.steerS * this.drift);
-      this.driftCharge += dt * (0.85 + 0.6 * into) * (this.offroad ? 0.4 : 1);
+      this.driftCharge += dt * (0.85 + 0.6 * into) * (this.offroad ? 0.4 : 1) * this.driftChargeMult;
       let lvl = 0;
       for (const th of T.miniLevels) if (this.driftCharge >= th) lvl++;
       if (lvl > this.driftLevel) {
@@ -311,6 +315,16 @@ export class Kart {
     // Barreras.
     const wallLat = L.hw + tr.shoulder + 0.05 - T.radius * 0.8;
     const al = Math.abs(L.lat);
+    // Con dirección asistida, las barreras están "acolchadas": se frena el deslizamiento hacia ellas antes del golpe.
+    if (this.assisted && al > wallLat - 2.5) {
+      const sgn = Math.sign(L.lat);
+      const vn = (this.vel.x * L.nx + this.vel.z * L.nz) * sgn;
+      if (vn > 0) {
+        const k = 1 - Math.exp(-9 * dt * Math.min(1, (al - (wallLat - 2.5)) / 2.5 + 0.3));
+        this.vel.x -= L.nx * sgn * vn * k;
+        this.vel.z -= L.nz * sgn * vn * k;
+      }
+    }
     if (al > wallLat) {
       const sgn = Math.sign(L.lat);
       const push = al - wallLat;

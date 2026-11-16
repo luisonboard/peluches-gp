@@ -6,6 +6,7 @@ import type { Kart, KartCtl } from './kart';
 import { NO_CTL, TUNING } from './kart';
 import type { AIDriver, AIContext } from './ai';
 import type { Arena } from './arena';
+import { applyAssist, type AssistOpts } from './assist';
 
 export type Phase = 'grid' | 'countdown' | 'racing' | 'done';
 
@@ -38,6 +39,11 @@ export class Race {
   private prevItem: boolean[] = [];
   private prevPower: boolean[] = [];
   private readonly ctx: AIContext = { order: [], level: 0, gums: [] };
+  /** Para el poder automático del jugador: decide como un piloto atento. */
+  private readonly playerCtx: AIContext = { order: [], level: 2, gums: [] };
+  private readonly assisted: KartCtl = { ...NO_CTL };
+  assist: AssistOpts = { autoAccel: false, smartSteer: false };
+  autoPower = false;
 
   constructor(
     readonly karts: Kart[],
@@ -93,7 +99,9 @@ export class Race {
       this.lastCount = n;
       const pc = this.autoplay ? this.ais[0].drive(this.player, dt, false) : playerCtl;
       // Turbo de salida: mantener el acelerador durante el último segundo (ni antes ni después).
-      if (pc.throttle > 0.5) this.player.startHold += dt;
+      // Con aceleración automática, el turbo de salida llega solo en el último segundo (ayuda para los peques).
+      const autoHold = this.assist.autoAccel && !this.autoplay && this.countdown < 0.75;
+      if (pc.throttle > 0.5 || autoHold) this.player.startHold += dt;
       else this.player.startHold = 0;
       for (const k of this.karts) k.update(dt, NO_CTL, false);
       if (this.countdown <= 0) {
@@ -112,7 +120,17 @@ export class Race {
     for (let n = 0; n < this.karts.length; n++) {
       const k = this.karts[n];
       const useAi = !k.isPlayer || this.autoplay || k.finished;
-      const ctl = useAi ? this.ais[n].drive(k, dt, true, this.ctx) : playerCtl;
+      let ctl = useAi ? this.ais[n].drive(k, dt, true, this.ctx) : playerCtl;
+      if (!useAi) {
+        ctl = applyAssist(k, playerCtl, this.assist, this.assisted);
+        if (this.autoPower && k.power >= 1) {
+          this.playerCtx.order = this.order;
+          this.playerCtx.gums = this.ctx.gums;
+          const ai = this.ais[n].drive(k, dt, true, this.playerCtx);
+          ctl.power ||= ai.power;
+        }
+      }
+      k.assisted = !useAi && this.assist.smartSteer;
       k.update(dt, ctl, true);
       if (ctl.item && !this.prevItem[n] && !k.finished) this.arena.useItem(k);
       if (ctl.power && !this.prevPower[n] && !k.finished) this.arena.usePower(k);
