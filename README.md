@@ -67,6 +67,7 @@ volante, nombres de los peluches y prueba del mando.
 | `?seed=texto` | Semilla de lo procedural |
 | `?perfil=peque\|normal` | Aplica un perfil al cargar |
 | `?track=cuarto\|bano\|jardin` | Pista al cargar |
+| `?copa` | Elige la copa de 3 carreras (con `?autostart`, empieza sola) |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
 | `?noaudio` | Sin audio |
@@ -237,6 +238,24 @@ parado más de 2 s, vueltas del jugador automático de 27–35 s, salto de ≈ 0
 180 cruces (karts que llegaban sin turbo tras un golpe). Perfil Peque sin tocar nada: 3 vueltas de ≈ 30 s,
 0 choques contra barreras, 0 caídas, 0 % fuera de la pista. `?bench`: Medio 60 fps, 3,8 ms de GPU; Bajo 60 fps,
 1,5 ms, 99 k triángulos. Cambiar 9 veces entre las tres pistas: memoria estable.
+
+**Hito 10 — Copa Peluche** (terminado, fase 2):
+
+- Cuarta tarjeta en el menú, "Copa": Cuarto de Juegos → Bañera Burbujeante → Jardín de Noche. Puntos 10/8/6/4/3/2
+  (`src/game/cup.ts`). Desempates: más victorias y luego mejor puesto en la última carrera.
+- Tras cada carrera, "Ver la copa ▶" muestra la clasificación con los puntos ganados y flechas ▲▼. La siguiente
+  carrera sale con la parrilla al revés de la clasificación (el líder sale último). Al final, los tres primeros de
+  la copa en el podio con trofeos de oro, plata y bronce, y "Otra copa".
+- En línea: en la sala, Pista → "🏆 Copa (3 pistas)". El anfitrión lleva los puntos (por peluche: si alguien se
+  va, la IA sigue con su peluche y sus puntos) y los manda a todos (protocolo 3: `cup` y la copa en `start`).
+  Una copa a medias no se guarda.
+- En el menú, las tarjetas de pista usan nombres cortos (Cuarto, Bañera, Jardín, Copa); el nombre completo está
+  en la ayuda.
+
+Comprobado: `npm run check:copa` (puntos, desempates, parrilla, flechas y copia por la red). Copa entera con
+`?copa&autostart&autoplay` sin errores: las tres pistas en orden y la parrilla de las carreras 2 y 3 igual a la
+clasificación al revés. Copa en línea con dos pestañas por el relevo: las dos ven la misma clasificación final.
+Menú a 1280 × 720 y 844 × 390 sin botones fuera de la pantalla.
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

@@ -8,13 +8,16 @@ import type { Race } from '../game/race';
 import type { Arena } from '../game/arena';
 import { NetHost, NetGuest, normalizeCode } from './net';
 import { RelayHost, RelayGuest, relayAvailable } from './relay';
-import { MAX_PLAYERS, PROTOCOL, type LobbyPlayer, type Msg, type RosterEntry } from './protocol';
+import { MAX_PLAYERS, PROTOCOL, type CupData, type LobbyPlayer, type Msg, type RosterEntry } from './protocol';
+import { Cup } from '../game/cup';
 
 export interface SessionHooks {
   /** Cambió la sala de espera: volver a dibujarla. */
   onLobby(): void;
   /** Empieza una carrera. */
-  onStart(roster: RosterEntry[], laps: number, cpu: string, track: string): void;
+  onStart(roster: RosterEntry[], laps: number, cpu: string, track: string, cup: Cup | null): void;
+  /** Puntos de la copa tras una carrera (los envía el anfitrión). */
+  onCup(cup: Cup): void;
   /** El anfitrión volvió a la sala tras la carrera. */
   onMenu(): void;
   /** Error que termina la sesión (se vuelve al menú). */
@@ -33,7 +36,10 @@ export class Session {
   me = 0;
   laps = 3;
   cpu = 'facil';
+  /** Pista elegida en la sala, o 'copa'. */
   track = 'cuarto';
+  /** Copa en curso (en el anfitrión es la que manda; en los invitados, la última recibida). */
+  cup: Cup | null = null;
   racing = false;
   roster: RosterEntry[] = [];
   private host: NetHost | RelayHost | null = null;
@@ -121,6 +127,7 @@ export class Session {
 
   setOptions(laps: number, cpu: string, track: string): void {
     if (!this.isHost) return;
+    if (track !== this.track) this.cup = null;
     this.laps = laps;
     this.cpu = cpu;
     this.track = track;
@@ -195,18 +202,24 @@ export class Session {
         this.laps = m.laps;
         this.cpu = m.cpu;
         this.track = m.track;
-        if (!this.racing) this.hooks.onLobby();
+        if (!this.racing) {
+          this.cup = null;
+          this.hooks.onLobby();
+        }
         return;
       case 'start':
         this.roster = m.roster;
         this.laps = m.laps;
         this.cpu = m.cpu;
-        this.track = m.track;
+        this.cup = m.cup ? Cup.fromJSON(m.cup) : null;
         if (m.roster.some((r) => r.owner === this.ownerId)) {
           this.racing = true;
-          this.hooks.onStart(m.roster, m.laps, m.cpu, m.track);
+          this.hooks.onStart(m.roster, m.laps, m.cpu, m.track, this.cup);
         }
         return;
+      case 'cup':
+        this.cup = Cup.fromJSON(m.cup);
+        return this.hooks.onCup(this.cup);
       case 'menu':
         this.racing = false;
         this.race = null;
@@ -254,10 +267,30 @@ export class Session {
       if (roster.length >= MAX_PLAYERS) break;
       if (!roster.some((r) => r.char === c.id)) roster.push({ slot: roster.length, char: c.id, name: '', owner: 'ai' });
     }
+    let track = this.track;
+    let cup: CupData | undefined;
+    if (this.track === 'copa') {
+      if (!this.cup || this.cup.done) {
+        this.cup = new Cup(roster.map((r) => ({ char: r.char, name: r.name || CHARACTERS.find((c) => c.id === r.char)!.defaultName })));
+      }
+      track = this.cup.trackId;
+      // Parrilla de copa: el último de la clasificación sale primero (el puesto de salida es el slot).
+      const grid = this.cup.gridOrder();
+      if (grid) for (const r of roster) r.slot = Math.max(0, grid.indexOf(r.char));
+      cup = this.cup.toJSON();
+    }
     this.roster = roster;
     this.racing = true;
-    this.host.broadcast({ t: 'start', roster, laps: this.laps, cpu: this.cpu, track: this.track });
-    this.hooks.onStart(roster, this.laps, this.cpu, this.track);
+    this.host.broadcast({ t: 'start', roster, laps: this.laps, cpu: this.cpu, track, cup });
+    this.hooks.onStart(roster, this.laps, this.cpu, track, this.cup);
+  }
+
+  /** Anfitrión: suma la carrera a la copa con el orden final y se lo manda a todos. */
+  scoreCup(order: { char: import('../core/events').Species; name: string }[]): Cup | null {
+    if (!this.isHost || !this.cup) return null;
+    this.cup.addRace(order);
+    this.host?.broadcast({ t: 'cup', cup: this.cup.toJSON() });
+    return this.cup;
   }
 
   /** Conecta la carrera recién creada con la red. */
@@ -289,6 +322,7 @@ export class Session {
   backToLobby(): void {
     if (!this.isHost) return;
     this.racing = false;
+    this.cup = null; // una copa a medias no se guarda
     this.race = null;
     this.arena.net = null;
     this.host?.broadcast({ t: 'menu' });

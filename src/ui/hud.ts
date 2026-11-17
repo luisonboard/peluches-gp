@@ -3,7 +3,8 @@ import type { Race, CpuLevel } from '../game/race';
 import { CPU_LEVELS } from '../game/race';
 import type { Track } from '../game/track';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
-import type { ItemId } from '../core/events';
+import type { ItemId, Species } from '../core/events';
+import type { Cup } from '../game/cup';
 import { TRACKS, trackOutline, type ReadyTrack } from '../world/tracks';
 
 export const ITEM_ICONS: Record<ItemId, string> = {
@@ -90,7 +91,7 @@ const CSS = `
   .pgp-row .pgp-go { font-size: 16px !important; padding: 8px 14px !important; box-shadow: 0 5px 0 rgba(0,0,0,.22) !important; }
   .pgp-screen.title .pgp-row[style*="margin-top"] { margin-top: 8px !important; }
 }
-.pgp-tracks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
+.pgp-tracks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: 100%; }
 .pgp-track { border: 4px solid transparent; border-radius: 18px; background: #f1effa; padding: 6px 8px; cursor: pointer; font: inherit; color: inherit;
   display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; text-align: left; min-width: 0; }
 .pgp-track canvas, .pgp-track .lock { width: 56px; height: 42px; border-radius: 10px; background: #fff; display: block; }
@@ -98,12 +99,28 @@ const CSS = `
 .pgp-track .nm { font-weight: 900; font-size: 15px; line-height: 1.15; }
 .pgp-track .sp { font-size: 11px; font-weight: 700; color: #6a64a0; line-height: 1.2; }
 .pgp-track.sel { border-color: #2a2050; background: #fff; }
+.pgp-track .cupicon { width: 56px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-size: 26px; background: linear-gradient(#ffe27a, #ffb52a); }
+.pgp-track .sp { display: none; }
+/* Nombre corto en la tarjeta (Cuarto, Bañera, Jardín, Copa); el completo va en la ayuda (title). */
+.pgp-track .nm { display: none; }
+.pgp-track .nm.short { display: block; }
+@media (min-height: 521px) and (min-width: 621px) {
+  .pgp-track { padding: 5px 8px; gap: 8px; }
+  .pgp-track canvas, .pgp-track .lock, .pgp-track .cupicon { width: 44px; height: 33px; font-size: 20px; }
+  .pgp-track .nm { font-size: 14px; }
+}
+
+.pgp-cup td.mv { width: 22px; text-align: center; font-size: 15px; }
+.pgp-cup td.mv.up { color: #2f9a4a; } .pgp-cup td.mv.down { color: #d8423a; }
+.pgp-cup td.add { color: #2f9a4a; text-align: right; width: 44px; }
+.pgp-cup td.tot { text-align: right; width: 48px; }
+.pgp-cup .sub { text-align: center; color: #6a64a0; font-weight: 800; margin: -6px 0 10px; }
 .pgp-track:disabled { cursor: default; opacity: .6; }
 @media (max-width: 620px) {
   .pgp-track-label { display: none; }
   .pgp-tracks { margin-top: 10px; }
   .pgp-track { grid-template-columns: 1fr; justify-items: center; text-align: center; gap: 4px; padding: 4px; }
-  .pgp-track canvas, .pgp-track .lock { width: 44px; height: 33px; font-size: 16px; }
+  .pgp-track canvas, .pgp-track .lock, .pgp-track .cupicon { width: 44px; height: 33px; font-size: 16px; }
   .pgp-track .nm { font-size: 12px; }
   .pgp-track .sp { display: none; }
 }
@@ -111,7 +128,7 @@ const CSS = `
   .pgp-track-label { display: none; }
   .pgp-tracks { margin-top: 6px; }
   .pgp-track { padding: 2px 6px; border-width: 3px; gap: 6px; border-radius: 14px; }
-  .pgp-track canvas, .pgp-track .lock { width: 36px; height: 26px; font-size: 14px; border-radius: 8px; }
+  .pgp-track canvas, .pgp-track .lock, .pgp-track .cupicon { width: 36px; height: 26px; font-size: 14px; border-radius: 8px; }
   .pgp-track .nm { font-size: 12px; }
   .pgp-track .sp { display: none; }
   .pgp-screen.title .pgp-row[style*="margin-top"] { flex-wrap: nowrap; gap: 8px !important; }
@@ -167,6 +184,8 @@ const CSS = `
 export interface TitleSetup {
   charIndex: number;
   trackId: string;
+  /** Copa de 3 carreras en vez de una carrera suelta. */
+  cup: boolean;
   cpu: CpuLevel;
   laps: number;
 }
@@ -435,11 +454,20 @@ export class Hud {
         b.append(el('div', 'lock', '🔒'));
       }
       const txt = el('div');
-      txt.append(el('div', 'nm', t.name), el('div', 'sp', t.ready ? t.blurb : 'Pronto'));
+      b.title = t.ready ? `${t.name}: ${t.blurb.toLowerCase()}` : `${t.name}: pronto`;
+      txt.append(el('div', 'nm', t.name), el('div', 'nm short', t.name.replace(/^El |^La /, '').split(' ')[0]), el('div', 'sp', t.ready ? t.blurb : 'Pronto'));
       b.append(txt);
       tracks.append(b);
       return b;
     });
+    const cupBtn = el('button', 'pgp-track');
+    cupBtn.append(el('div', 'cupicon', '🏆'));
+    const cupTxt = el('div');
+    cupTxt.append(el('div', 'nm', 'Copa Peluche'), el('div', 'nm short', 'Copa'), el('div', 'sp', 'Las 3 pistas seguidas'));
+    cupBtn.append(cupTxt);
+    cupBtn.title = 'Copa Peluche: las 3 pistas seguidas, con puntos';
+    cupBtn.onclick = () => setCup();
+    tracks.append(cupBtn);
     card.append(trackRow);
 
     const opts = el('div', 'pgp-opts');
@@ -499,7 +527,8 @@ export class Hud {
       const ch = CHARACTERS[s.charIndex];
       powerInfo.innerHTML = `<b>${displayName(ch)}</b> · ${ch.power}: ${ch.powerDesc.toLowerCase()}`;
       charBtns.forEach((b, i) => b.classList.toggle('sel', i === s.charIndex));
-      trackBtns.forEach((b, i) => b.classList.toggle('sel', TRACKS[i].id === s.trackId));
+      trackBtns.forEach((b, i) => b.classList.toggle('sel', !s.cup && TRACKS[i].id === s.trackId));
+      cupBtn.classList.toggle('sel', s.cup);
       cpuBtns.forEach((b, i) => b.classList.toggle('sel', CPU_LEVELS[i].id === s.cpu.id));
       lapBtns.forEach((b, i) => b.classList.toggle('sel', [2, 3][i] === s.laps));
     };
@@ -510,14 +539,25 @@ export class Hud {
     };
     const readyIds = TRACKS.filter((t) => t.ready).map((t) => t.id);
     const setTrack = (id: string): void => {
-      if (id === s.trackId) return;
+      if (id === s.trackId && !s.cup) return;
       s.trackId = id;
+      s.cup = false;
+      refresh();
+      onChange({ ...s });
+    };
+    const setCup = (): void => {
+      if (s.cup) return;
+      s.cup = true;
       refresh();
       onChange({ ...s });
     };
     const stepTrack = (d: number): void => {
-      const i = readyIds.indexOf(s.trackId);
-      setTrack(readyIds[Math.max(0, Math.min(readyIds.length - 1, i + d))]);
+      // Las pistas y, al final, la copa.
+      const opts = [...readyIds, 'copa'];
+      const i = s.cup ? opts.length - 1 : readyIds.indexOf(s.trackId);
+      const next = opts[Math.max(0, Math.min(opts.length - 1, i + d))];
+      if (next === 'copa') setCup();
+      else setTrack(next);
     };
     const setCpu = (lv: CpuLevel): void => {
       s.cpu = lv;
@@ -596,6 +636,51 @@ export class Hud {
     this.menuInput([]);
     this.resultsTable = table;
     this.refreshResults(race);
+  }
+
+  /**
+   * Clasificación de la copa tras una carrera (o la final). `me`: el peluche de este jugador.
+   * `onNext` null = este dispositivo espera al anfitrión (se muestra `wait`).
+   */
+  showCup(cup: Cup, me: Species | null, o: { onNext: (() => void) | null; nextLabel: string; onMenu: () => void; menuLabel: string; wait?: string }): void {
+    this.resultsTable = null;
+    const rows = cup.standings();
+    const mine = rows.find((r) => r.char === me);
+    const card = el('div', 'pgp-card pgp-results pgp-cup');
+    card.style.width = 'min(560px, 100%)';
+    let title = `Copa Peluche · ${cup.raced} de ${cup.total}`;
+    if (cup.done && mine) title = mine.rank === 1 ? '¡Ganaste la copa! 🏆' : mine.rank <= 3 ? `¡${ordinal(mine.rank)} en la copa! 🏆` : 'Copa terminada';
+    card.append(el('h2', '', title));
+    const next = TRACKS.find((t) => t.id === cup.trackId);
+    card.append(el('div', 'sub', cup.done ? 'Clasificación final' : `Siguiente: ${next?.name ?? ''}`));
+    const table = el('table');
+    table.innerHTML = rows
+      .map((r) => {
+        const c = CHARACTERS.find((x) => x.id === r.char);
+        const mv = r.rank < r.prevRank ? ['up', '▲'] : r.rank > r.prevRank ? ['down', '▼'] : ['', ''];
+        return `<tr class="${r.char === me ? 'me' : ''}"><td>${ordinal(r.rank)}</td><td class="mv ${mv[0]}">${mv[1]}</td>
+        <td><span class="dot" style="background:${c ? cssColor(c.kart) : '#888'}"></span>${r.name}${r.char === me ? ' (tú)' : ''}</td>
+        <td class="add">${r.last ? '+' + r.last : ''}</td><td class="tot">${r.points}</td></tr>`;
+      })
+      .join('');
+    card.append(table);
+    const btns = el('div', 'btns');
+    const rowsNav: { el: HTMLElement; ok: () => void }[] = [];
+    if (o.onNext) {
+      const nb = el('button', 'pgp-go', o.nextLabel);
+      nb.onclick = o.onNext;
+      btns.append(nb);
+      rowsNav.push({ el: nb, ok: o.onNext });
+    } else if (o.wait) card.append(el('div', 'sub', o.wait));
+    const mb = el('button', 'pgp-go alt', o.menuLabel);
+    mb.onclick = o.onMenu;
+    btns.append(mb);
+    rowsNav.push({ el: mb, ok: o.onMenu });
+    card.append(btns);
+    this.openScreen(card, true);
+    this.menuRows = rowsNav.map((r) => ({ ...r, right: () => this.menuInput(['down']), left: () => this.menuInput(['up']) }));
+    this.focus = 0;
+    this.menuInput([]);
   }
 
   private resultsTable: HTMLTableElement | null = null;

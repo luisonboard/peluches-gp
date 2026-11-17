@@ -12,6 +12,7 @@ import { makeTextures } from './world/textures';
 import { buildTrack, type TrackVisual } from './world/trackMesh';
 import { readyTrack, dustColor, type ReadyTrack } from './world/tracks';
 import { Obstacles } from './game/obstacles';
+import { Cup, CUP_TRACKS } from './game/cup';
 import { Track } from './game/track';
 import { CHARACTERS } from './game/characters';
 import { KartModel } from './game/kartModel';
@@ -34,6 +35,7 @@ import { openSettings } from './ui/settings';
 import { toggleFullscreen, fullscreenSupported } from './ui/fullscreen';
 import { Session } from './net/session';
 import type { RosterEntry } from './net/protocol';
+import type { Species } from './core/events';
 import { showOnlineMenu, showLobby, closeLobbyScreen } from './ui/lobby';
 import { normalizeCode } from './net/net';
 import { NO_CTL } from './game/kart';
@@ -68,7 +70,8 @@ function mountTrack(id: string): void {
   obstacles = new Obstacles(track, quality.shadowMap > 0);
   scene.add(trackVis.group, scenery, obstacles.group);
 }
-mountTrack(params.track ?? settings.trackId);
+const wantsCup = params.copa || (!params.track && settings.cup);
+mountTrack(params.track ?? (wantsCup ? CUP_TRACKS[0] : settings.trackId));
 
 const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 1600);
 const chase = new ChaseCam(camera);
@@ -160,12 +163,18 @@ if (params.laps) settings.laps = params.laps;
 if (params.profile === 'normal' || params.profile === 'peque') applyProfile(settings, params.profile);
 const setup: TitleSetup = {
   charIndex: settings.charIndex,
-  trackId: trackEntry.id,
+  trackId: wantsCup ? settings.trackId : trackEntry.id,
+  cup: wantsCup,
   cpu: CPU_LEVELS.find((l) => l.id === settings.cpu) ?? CPU_LEVELS[0],
   laps: settings.laps,
 };
 let race: Race;
 let karts: Kart[] = [];
+/** Copa local en curso (en línea la lleva la sesión). */
+let cup: Cup | null = null;
+const activeCup = (): Cup | null => (session.active ? session.cup : cup);
+/** Pista que se ve en el menú: la elegida, o la primera de la copa. */
+const titleTrack = (): string => (setup.cup ? CUP_TRACKS[0] : setup.trackId);
 let resultsShownAt = -1;
 
 const gyro = new Gyro();
@@ -198,6 +207,7 @@ function storeSetup(): void {
   settings.cpu = setup.cpu.id;
   settings.laps = setup.laps;
   settings.trackId = setup.trackId;
+  settings.cup = setup.cup;
   saveSettings(settings);
 }
 
@@ -233,8 +243,11 @@ function buildRace(net?: RosterEntry[]): void {
       return k;
     });
   }
+  // En la copa, el último de la clasificación sale primero.
+  const grid = !net && cup ? cup.gridOrder() : null;
+  if (grid) for (const k of karts) k.slot = Math.max(0, grid.indexOf(k.char.id));
   const ais = karts.map((_, i) => new AIDriver(aiRng.fork(`p${i}`), i === 0 ? 0.8 : setup.cpu.driftSkill));
-  race = new Race(karts, ais, setup.laps, setup.cpu, net ? false : params.autoplay, aiRng.fork('carrera'), arena, !!net);
+  race = new Race(karts, ais, setup.laps, setup.cpu, net ? false : params.autoplay, aiRng.fork('carrera'), arena, !!net || !!grid);
   race.hazards = obstacles.hazards;
   if (net) session.attach(race, karts);
   else arena.net = null;
@@ -270,7 +283,9 @@ function showSettings(after: () => void): void {
 
 function showTitle(): void {
   mode = 'title';
+  cup = null;
   loop.fpsLimit = params.fps ?? 30;
+  loadTrack(titleTrack());
   buildRace();
   placeShowroomKart();
   hud.setRaceVisible(false);
@@ -279,17 +294,17 @@ function showTitle(): void {
     setup,
     (s) => {
       const charChanged = s.charIndex !== setup.charIndex;
-      const trackChanged = s.trackId !== setup.trackId;
+      const before = titleTrack();
       Object.assign(setup, s);
       storeSetup();
-      if (trackChanged) loadTrack(setup.trackId);
+      const trackChanged = loadTrack(titleTrack()) || before !== titleTrack();
       if (charChanged || trackChanged) {
         buildRace();
         placeShowroomKart();
       }
       audio.click();
     },
-    startRace,
+    () => (setup.cup ? startCup() : startRace()),
     () => showSettings(showTitle),
     titleStatus(),
     fullscreenSupported() ? toggleFullscreen : null,
@@ -298,6 +313,71 @@ function showTitle(): void {
   hud.screenClass('title');
   podium.hide();
   audio.playMusic('menu');
+}
+
+/** Copa local: las tres pistas seguidas. */
+function startCup(): void {
+  cup = new Cup(CHARACTERS.map((c) => ({ char: c.id, name: displayName(c) })));
+  loadTrack(cup.trackId);
+  startRace();
+}
+
+/** Tras una carrera de copa: suma los puntos (en el orden en que van) y muestra la clasificación. */
+function cupOrder(): { char: Species; name: string }[] {
+  return race.order.map((k) => ({ char: k.char.id, name: k.name }));
+}
+
+function showCupStandings(c: Cup): void {
+  const me = karts[0]?.char.id ?? null;
+  if (c.done) {
+    const top = c.standings().slice(0, 3).map((r) => CHARACTERS.find((x) => x.id === r.char)!);
+    podium.show(top, true);
+    podiumT = 0;
+    const mine = c.standings().find((r) => r.char === me);
+    if (mine) voice.say(mine.rank === 1 ? '¡Ganaste la copa!' : `¡Quedaste en el lugar ${mine.rank} de la copa!`);
+  }
+  if (session.active && session.isHost)
+    hud.showCup(c, me, {
+      onNext: c.done ? backToRoom : () => session.start(),
+      nextLabel: c.done ? 'Volver a la sala' : '¡Siguiente carrera!',
+      onMenu: leaveOnline,
+      menuLabel: 'Cerrar sala',
+    });
+  else if (session.active)
+    hud.showCup(c, me, { onNext: null, nextLabel: '', onMenu: leaveOnline, menuLabel: 'Salir', wait: 'Esperando al anfitrión…' });
+  else
+    hud.showCup(c, me, {
+      onNext: c.done ? startCup : nextCupRace,
+      nextLabel: c.done ? 'Otra copa' : '¡Siguiente carrera!',
+      onMenu: showTitle,
+      menuLabel: 'Menú',
+    });
+  hud.screenClass('side');
+}
+
+function nextCupRace(): void {
+  if (!cup || cup.done) return;
+  loadTrack(cup.trackId);
+  startRace();
+}
+
+/** Anfitrión: todos de vuelta a la sala de espera. */
+function backToRoom(): void {
+  hud.closeScreen();
+  toTitleQuiet();
+  session.backToLobby();
+}
+
+/** Invitado: puntos que llegaron mientras su carrera aún no mostraba resultados. */
+let pendingCup: Cup | null = null;
+/** La carrera de copa en curso ya sumó sus puntos (evita sumarla dos veces). */
+let scoredThisRace = false;
+
+function scoreLocalCup(): void {
+  if (!cup || scoredThisRace || race.phase !== 'done') return;
+  scoredThisRace = true;
+  cup.addRace(cupOrder());
+  showCupStandings(cup);
 }
 
 function startRace(): void {
@@ -331,6 +411,12 @@ function beginRace(): void {
   touch.show(touchOn);
   resultsShownAt = -1;
   race.start();
+  scoredThisRace = false;
+  const c = activeCup();
+  if (c) {
+    hud.flash(`Copa · carrera ${c.raced + 1} de ${c.total}`, true, '#ffd23a');
+    voice.say(`Carrera ${c.raced + 1} de la copa`);
+  }
   // La posición en que sostiene el teléfono al empezar cuenta como "recto".
   setTimeout(() => gyro.calibrate(), 600);
 }
@@ -362,12 +448,17 @@ const session: Session = new Session(
       if (mode === 'title' && !closeSettings) renderLobby();
     },
     onStart: (roster, laps, cpu, trackId) => {
+      pendingCup = null;
       loadTrack(trackId);
       setup.laps = laps;
       setup.cpu = CPU_LEVELS.find((l) => l.id === cpu) ?? CPU_LEVELS[0];
       audio.unlock();
       buildRace(roster);
       beginRace();
+    },
+    onCup: (c) => {
+      if (mode === 'results') showCupStandings(c);
+      else pendingCup = c;
     },
     onMenu: () => {
       // El anfitrión volvió a la sala: todos a la sala de espera.
@@ -408,7 +499,7 @@ function openOnline(error?: string, code?: string): void {
     code,
     onCreate: () => {
       showOnlineMenu({ busy: 'Creando la sala…', onCreate: () => {}, onJoin: () => {}, onBack: () => openOnline() });
-      session.create(myChar().id, displayName(myChar()), setup.laps, setup.cpu.id, trackEntry.id).catch((e: Error) => openOnline(e.message));
+      session.create(myChar().id, displayName(myChar()), setup.laps, setup.cpu.id, setup.cup ? 'copa' : trackEntry.id).catch((e: Error) => openOnline(e.message));
     },
     onJoin: (raw) => {
       const c = normalizeCode(raw);
@@ -436,9 +527,10 @@ function renderLobby(): void {
     },
     options: (laps, cpu, trackId) => {
       session.setOptions(laps, cpu, trackId);
-      setup.trackId = trackId;
+      setup.cup = trackId === 'copa';
+      if (!setup.cup) setup.trackId = trackId;
       storeSetup();
-      if (loadTrack(trackId)) {
+      if (loadTrack(titleTrack())) {
         buildRace();
         placeShowroomKart();
       }
@@ -748,12 +840,16 @@ function frame(dt: number): void {
         hud.setRaceVisible(false);
         podiumT = 0;
         audio.playMusic('menu');
-        if (session.active && session.isHost) hud.showResults(race, () => {
-            hud.closeScreen();
-            toTitleQuiet();
-            session.backToLobby();
-          }, leaveOnline, 'Volver a la sala', 'Cerrar sala');
+        const c = activeCup();
+        if (session.active && session.isHost && c)
+          hud.showResults(race, () => {
+            const scored = session.scoreCup(cupOrder());
+            if (scored) showCupStandings(scored);
+          }, leaveOnline, 'Ver la copa ▶', 'Cerrar sala');
+        else if (session.active && session.isHost) hud.showResults(race, backToRoom, leaveOnline, 'Volver a la sala', 'Cerrar sala');
+        else if (session.active && pendingCup) showCupStandings(pendingCup);
         else if (session.active) hud.showResults(race, () => {}, leaveOnline, 'Esperando al anfitrión…', 'Salir');
+        else if (cup) hud.showResults(race, scoreLocalCup, showTitle, 'Ver la copa ▶', 'Salir de la copa');
         else hud.showResults(race, startRace, showTitle);
         hud.screenClass('side');
       } else if (resultsShownAt >= 0) hud.refreshResults(race);
@@ -803,7 +899,10 @@ function frame(dt: number): void {
 // ---------------- Arranque ----------------
 
 showTitle();
-if (params.autostart) startRace();
+if (params.autostart) {
+  if (setup.cup) startCup();
+  else startRace();
+}
 const salaParam = new URLSearchParams(location.search).get('sala');
 if (salaParam && !params.autostart) {
   // Enlace o QR de una sala: se intenta entrar directamente.
@@ -826,6 +925,15 @@ window.__game = {
   },
   get track() {
     return track;
+  },
+  get cup() {
+    return activeCup();
+  },
+  /** Para las pruebas: pasa de los resultados a la clasificación de la copa y a la siguiente carrera. */
+  cupNext() {
+    if (!cup) return;
+    if (mode === 'results' && !scoredThisRace) scoreLocalCup();
+    else if (!cup.done) nextCupRace();
   },
   get obstacles() {
     return obstacles;

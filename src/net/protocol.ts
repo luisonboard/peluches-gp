@@ -1,8 +1,14 @@
 // Mensajes entre dispositivos. Topología en estrella: los invitados hablan con el anfitrión y él reenvía.
 import type { ItemId, Species } from '../core/events';
 
-/** 2: la sala y el inicio llevan la pista. */
-export const PROTOCOL = 2;
+/** 2: la sala y el inicio llevan la pista. 3: copa de 3 carreras. */
+export const PROTOCOL = 3;
+
+/** Copa en curso tal como viaja por la red (ver game/cup.ts). */
+export interface CupData {
+  raced: number;
+  rows: import('../game/cup').CupRow[];
+}
 export const MAX_PLAYERS = 6;
 
 export interface LobbyPlayer {
@@ -36,9 +42,13 @@ export const HIT_CODES = ['', 'spin', 'stuck', 'bubble', 'shrink', 'tumble'] as 
 export type Msg =
   | { t: 'hello'; v: number; name: string; char: Species }
   | { t: 'reject'; why: string }
+  /** `track` puede ser 'copa'. */
   | { t: 'lobby'; players: LobbyPlayer[]; laps: number; cpu: string; track: string; you: number; racing: boolean }
   | { t: 'pick'; char: Species; name: string }
-  | { t: 'start'; roster: RosterEntry[]; laps: number; cpu: string; track: string }
+  /** `track`: pista de esta carrera. `cup`: copa en curso (si es una copa). */
+  | { t: 'start'; roster: RosterEntry[]; laps: number; cpu: string; track: string; cup?: CupData }
+  /** Anfitrión: puntos de la copa tras una carrera. */
+  | { t: 'cup'; cup: CupData }
   | { t: 'st'; k: KartState[] }
   | {
       t: 'use';

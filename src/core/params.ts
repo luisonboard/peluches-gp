@@ -22,4 +22,6 @@ export const params = {
   profile: q.get('perfil'),
   /** Pista por id (`cuarto`, …). */
   track: q.get('track'),
+  /** Copa de 3 carreras (con `?autostart` empieza sola). */
+  copa: q.has('copa'),
 };

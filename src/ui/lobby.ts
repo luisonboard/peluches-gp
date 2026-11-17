@@ -196,13 +196,13 @@ export function showLobby(s: Session, h: { pick: (c: Species) => void; options: 
       return col;
     };
     opts.append(
-      mk('Pista', TRACKS.filter((t) => t.ready).map((t) => [t.id, t.name]), s.track, (v) => h.options(s.laps, s.cpu, v)),
+      mk('Pista', [...TRACKS.filter((t) => t.ready).map((t): [string, string] => [t.id, t.name]), ['copa', '🏆 Copa (3 pistas)']], s.track, (v) => h.options(s.laps, s.cpu, v)),
       mk('Rivales de la IA', CPU_LEVELS.map((l) => [l.id, l.label]), s.cpu, (v) => h.options(s.laps, v, s.track)),
       mk('Vueltas', [['2', '2'], ['3', '3']], String(s.laps), (v) => h.options(Number(v), s.cpu, s.track)),
     );
     card.append(opts);
   } else {
-    card.insertAdjacentHTML('beforeend', `<p class="hint">${escapeHtml(TRACKS.find((t) => t.id === s.track)?.name ?? '')} · ${s.laps} vueltas · rivales ${CPU_LEVELS.find((l) => l.id === s.cpu)?.label ?? ''}</p>`);
+    card.insertAdjacentHTML('beforeend', `<p class="hint">${escapeHtml(s.track === 'copa' ? 'Copa Peluche (3 pistas)' : TRACKS.find((t) => t.id === s.track)?.name ?? '')} · ${s.laps} vueltas · rivales ${CPU_LEVELS.find((l) => l.id === s.cpu)?.label ?? ''}</p>`);
   }
 
   const btns = document.createElement('div');

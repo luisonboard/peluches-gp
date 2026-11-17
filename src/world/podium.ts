@@ -54,10 +54,40 @@ export class Podium {
     this.facing.set(Math.sin(yaw), 0, Math.cos(yaw));
   }
 
-  /** Coloca a los tres primeros (en orden de llegada). */
-  show(top: CharacterDef[]): void {
+  private trophies: THREE.Group[] = [];
+
+  /** Trofeos de oro, plata y bronce delante de cada escalón (final de la copa). */
+  private buildTrophies(): void {
+    const colors = [0xffc928, 0xd7dee8, 0xd0844a];
+    const profile = [
+      [0, 0], [0.55, 0], [0.55, 0.14], [0.16, 0.24], [0.13, 0.62], [0.2, 0.72], [0.62, 0.9], [0.72, 1.35], [0.66, 1.38], [0.5, 1.0], [0, 0.95],
+    ].map(([x, y]) => new THREE.Vector2(x, y));
+    const cup = new THREE.LatheGeometry(profile, 24);
+    const handle = new THREE.TorusGeometry(0.26, 0.06, 8, 16, Math.PI);
+    STEPS.forEach((s, i) => {
+      const mat = new THREE.MeshStandardMaterial({ color: colors[i], roughness: 0.25, metalness: 0.35, emissive: colors[i], emissiveIntensity: 0.12 });
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(cup, mat));
+      for (const side of [-1, 1]) {
+        const h = new THREE.Mesh(handle, mat);
+        h.rotation.z = side * Math.PI / 2;
+        h.position.set(side * 0.68, 1.05, 0);
+        g.add(h);
+      }
+      g.scale.setScalar(1.1 - i * 0.12);
+      g.position.set(s.x, 0, 2.2);
+      g.traverse((o) => ((o as THREE.Mesh).castShadow = true));
+      this.group.add(g);
+      this.trophies.push(g);
+    });
+  }
+
+  /** Coloca a los tres primeros (en orden de llegada). `trophies`: final de la copa. */
+  show(top: CharacterDef[], trophies = false): void {
     this.group.visible = true;
     this.t = 0;
+    if (trophies && !this.trophies.length) this.buildTrophies();
+    this.trophies.forEach((t, i) => (t.visible = trophies && !!top[i]));
     for (let i = 0; i < 3; i++) {
       const h = this.holders[i];
       h.clear();
@@ -89,6 +119,8 @@ export class Podium {
       if (!r) return;
       r.update({ steerS: Math.sin(this.t * 2 + i) * 0.4, speed: 0, t: this.t + i * 0.7, cheer: 1, hurt: 0 });
       this.holders[i].rotation.y = Math.sin(this.t * 1.5 + i) * 0.25;
+      const tr = this.trophies[i];
+      if (tr?.visible) tr.rotation.y = this.t * 1.2 + i;
     });
     // Confeti cayendo.
     const cols = [0xe8423a, 0x2f7de0, 0x3fb24a, 0xffd23a, 0xf07ab0, 0x8a4fd8];
