@@ -19,7 +19,7 @@ export class Podium {
   private cache = new Map<string, PlushRig>();
   private t = 0;
   /** Hacia dónde mira el podio (unitario, en el plano). */
-  readonly facing: THREE.Vector3;
+  readonly facing = new THREE.Vector3();
 
   constructor(
     readonly pos: THREE.Vector3,
@@ -29,9 +29,7 @@ export class Podium {
     private confetti: Particles,
   ) {
     const g = this.group;
-    g.position.copy(pos);
-    g.rotation.y = yaw;
-    this.facing = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    this.place(pos.x, pos.y, pos.z, yaw);
     for (const s of STEPS) {
       const side = new THREE.MeshStandardMaterial({ map: tex.letter(String(s.place), s.color), roughness: 0.45 });
       const top = new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.4 });
@@ -46,6 +44,14 @@ export class Podium {
       this.holders.push(holder);
     }
     g.visible = false;
+  }
+
+  /** Pone el podio en otro sitio (cada pista tiene el suyo). */
+  place(x: number, y: number, z: number, yaw: number): void {
+    this.pos.set(x, y, z);
+    this.group.position.copy(this.pos);
+    this.group.rotation.y = yaw;
+    this.facing.set(Math.sin(yaw), 0, Math.cos(yaw));
   }
 
   /** Coloca a los tres primeros (en orden de llegada). */

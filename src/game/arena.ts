@@ -153,6 +153,20 @@ export class Arena {
     for (const arr of [this.balls, this.gums, this.bubbles, this.missiles, this.rings, this.bolts]) for (const o of arr) o.on = false;
   }
 
+  /** Cambio de pista: las cajas regalo se rehacen en sus nuevas filas. */
+  setTrack(track: Track): void {
+    this.track = track;
+    for (const m of [this.boxPaper, this.boxRibbon]) {
+      m.removeFromParent();
+      m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+      m.dispose();
+    }
+    this.boxes = [];
+    this.buildBoxes();
+    this.reset([], () => []);
+  }
+
   // ---------------- Construcción ----------------
 
   private buildBoxes(): void {

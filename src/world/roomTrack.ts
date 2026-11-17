@@ -8,7 +8,9 @@ export const BED_HEIGHT = 8;
 export const BED_RECT = { x0: -158, x1: -91, z0: 58, z1: 146 };
 
 export const ROOM_TRACK: TrackDef = {
+  id: 'cuarto',
   name: 'El Cuarto de Juegos',
+  surfaceByHeight: (y) => (y > 7.5 ? 'bed' : y > 0.05 ? 'ramp' : 'floor'),
   scale: 1.4,
   shoulder: 3.2,
   points: [

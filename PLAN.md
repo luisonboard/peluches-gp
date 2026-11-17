@@ -122,7 +122,7 @@ Un hito por petición. Cada uno termina con un commit, capturas en el navegador 
 | 4 | **Multijugador en línea**: salas con código, sala de espera, sincronización, objetos y poderes en red, reconexión | 3 dispositivos (Mac, Android, iPhone) terminan una carrera juntos sin saltos visibles |
 | 5 | **Presentación y sonido**: menús con los peluches en 3D, música, efectos, vibración, podio final y pantalla de título | Capturas a 1280 × 720 y en teléfono vertical/horizontal sin textos que se pisen |
 | 6 | **PWA y publicación**: manifiesto, iconos, funcionamiento sin conexión, despliegue en Cloudflare Pages | Se instala en la pantalla de inicio del iPhone y del Android y abre sin conexión |
-| 7 (fase 2) | Más pistas, copa de 3 carreras, pantalla dividida, contrarreloj | — |
+| 7–12 (fase 2) | Más pistas, copa de 3 carreras, contrarreloj, pantalla dividida. Detalle en la sección 10 | — |
 
 **Fuera de alcance**: cuentas de usuario, clasificaciones en línea, emparejamiento con desconocidos y tiendas de
 aplicaciones (App Store o Play Store). Si algún día se quiere publicar en las tiendas, se puede empaquetar con
@@ -152,3 +152,49 @@ Capacitor.
 1. Los personajes se pueden renombrar desde el juego.
 2. Se publica en Cloudflare Pages, como las otras PWAs.
 3. El jugador principal tiene 5 años: perfil "Peque" con ayuda de manejo y la IA en Fácil por defecto.
+
+## 10. Fase 2 (plan del 17 nov 2026)
+
+La fase 2 añade dos pistas, la copa de 3 carreras, la contrarreloj y la pantalla dividida para 2 jugadores. Se
+mantiene la regla de la fase 1: un hito por petición, cada uno con commit, capturas (escritorio y teléfono) y
+`window.__errors` vacío.
+
+### Punto de partida en el código
+
+- Hay **una sola pista fija**: `main.ts` crea `Track(ROOM_TRACK)`, `buildTrack`, `buildRoom`, la `Arena` y el podio
+  al arrancar. La superficie (`floor`/`ramp`/`bed`) se deduce de la altura (`y > 7.5` = cama) y la escena (cielo,
+  niebla, luces) está pensada para el cuarto.
+- **Un solo jugador local**: `Input.read()` mezcla teclado y el primer mando, y hay 23 sitios que suponen que el
+  jugador es `karts[0]` (`kart === 0` en los eventos de sonido, vibración y HUD). Hay una sola `ChaseCam` y un HUD.
+- La red manda `laps` y `cpu` en `lobby` y `start`, pero no la pista (`PROTOCOL = 1`).
+
+### Hitos
+
+| # | Hito | Contenido | Listo cuando |
+|---|---|---|---|
+| 7 | **Pistas intercambiables** | `TrackDef` gana `id`, superficie por punto de control (en vez de por altura), posición del podio y un `theme` (escenario, cielo, niebla, luces, colores de barrera, tempo de la música). Registro `TRACKS` en `src/world/tracks.ts`. `loadTrack(id)` crea pista, escenario, arena y podio y libera (`dispose`) los anteriores. Elección de pista en el título (tarjetas grandes con el minimapa) y en la sala (la elige el anfitrión). Protocolo 2: `lobby` y `start` llevan `track`; un invitado con la versión vieja recibe "Actualiza el juego". `?track=` para pruebas | El Cuarto de Juegos se ve igual que antes (captura comparada). Cambiar de pista 10 veces no hace crecer `renderer.info.memory`. Build ≤ 1,5 MB |
+| 8 | **Bañera Burbujeante** | Baño de azulejos: suelo de baldosas, alfombra de baño (franja lenta), subida por una toalla doblada al borde de la bañera, tramo estrecho por el borde con barandas, bajada por un tobogán de esponja con salto. Patitos de goma que se mueven despacio como obstáculos y charcos de jabón (menos agarre, sin trompo). Burbujas flotando con las partículas que ya existen | Vuelta de 35–40 s. La IA termina 10 carreras sin atascarse (`?autoplay`). 60 fps en Medio con 6 karts |
+| 9 | **Jardín de Noche** | Luna (luz azulada), luciérnagas, farolitos en la valla. Césped como borde lento, sendero de piedras, salto sobre una manguera, túnel bajo una maceta tumbada, puente de tabla sobre un charco. Faros en los karts y luces en el borde de la pista cada 8 m para que se vean las curvas. Todo emisivo: sin luces puntuales en Bajo y Medio | Mismos criterios que el hito 8. Con el brillo del teléfono al mínimo se distinguen las curvas y los rivales |
+| 10 | **Copa de 3 carreras** | "Copa Peluche": Cuarto de Juegos → Bañera → Jardín. Puntos 10/8/6/4/3/2. Entre carreras, tabla con los peluches que suben y bajan; la parrilla de la siguiente sale en orden inverso a la clasificación. Al final, trofeo de oro, plata o bronce en el podio. En línea, el anfitrión lleva los puntos y los envía en un mensaje `cup`; si alguien se va, la IA sigue con sus puntos | Una copa entera con `?autoplay&copa` sin errores. Prueba de la suma de puntos y desempates |
+| 11 | **Contrarreloj** | Sin IA ni cajas, con 3 turbos cohete al salir. Mejor tiempo y mejor vuelta por pista. Fantasma de la mejor carrera: posición y rumbo 20 veces por segundo, cuantizados (≈ 20 KB por pista en el dispositivo). Medallas de bronce, plata y oro por pista; el bronce se puede ganar con la ayuda de manejo. Los tiempos hechos con ayuda llevan una estrella | El fantasma repite la carrera grabada con < 0,5 m de error. Los récords siguen tras recargar la página |
+| 12 | **Pantalla dividida (2 jugadores)** | Entrada por jugador: el jugador 1 usa teclado o mando 1 y el jugador 2 el mando 2, con una pantalla "Pulsa un botón para unirte". `localPlayers` sustituye a `karts[0]`: los 23 `kart === 0` pasan a `isLocal(kart)`. Ajustes de ayuda y perfil por jugador (Peque y Normal a la vez). Dos `ChaseCam` con `setViewport`/`setScissor`, arriba y abajo, HUD por mitad y minimapa compartido. Vibración en el mando de cada uno. En pantalla dividida la calidad baja un nivel (sombras y partículas). Vale para carrera normal y copa; no para contrarreloj, en línea ni en el teléfono | Dos mandos terminan una copa y cada uno maneja solo su kart. 60 fps en el Mac M3 Pro en Alto y ≥ 45 fps en una tablet de gama media en Bajo |
+
+**Orden**: el 7 va primero porque todo lo demás depende de él. La copa (10) necesita las tres pistas. La pantalla
+dividida es el cambio más grande y va al final; si se quiere jugar en pareja antes, puede adelantarse justo
+después del 7, ya que no depende de las pistas nuevas.
+
+### Riesgos de la fase 2
+
+| Riesgo | Mitigación |
+|---|---|
+| El archivo pasa de 1,5 MB con tres escenarios | Todo sigue siendo procedural. Medir el build en cada hito; cada escenario nuevo, ≤ 60 KB de código |
+| El iPhone se queda sin memoria al cambiar de pista | `dispose` de geometrías, materiales y texturas al cambiar, y la prueba de memoria del hito 7 |
+| La pantalla dividida duplica el coste de dibujo | Bajar un nivel de calidad en pantalla dividida y medir con `?bench&split` |
+| Un invitado con la versión vieja entra en una sala nueva | Protocolo 2 y aviso "Actualiza el juego" en vez de errores raros |
+| El jardín resulta demasiado oscuro para un niño de 5 años | Luces en el borde, faros y prueba con tu hijo; si cuesta, la luna ilumina más en el perfil Peque |
+
+### Decisiones de la fase 2 (17 nov 2026)
+
+1. Puntos de la copa: 10/8/6/4/3/2.
+2. La pantalla dividida va al final (hito 12).
+3. Una copa a medias no se guarda: si se sale, se pierde.

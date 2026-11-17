@@ -333,9 +333,13 @@ export function makeTextures(rng: Rng, aniso: number): Textures {
     g.fillStyle = '#ffffff';
     g.fillText(ch, 128, 140);
     const t = toTex(c, aniso, false);
+    t.userData.shared = true;
     letterCache.set(key, t);
     return t;
   };
 
-  return { wood, road, curb, felt, blanket, wall, cardboard, checker, pad, ball, blob, banner, pages, letter };
+  const all = { wood, road, curb, felt, blanket, wall, cardboard, checker, pad, ball, blob, banner, pages };
+  // Compartidas por todas las pistas: no se liberan al cambiar de pista (ver render/dispose.ts).
+  for (const t of Object.values(all)) t.userData.shared = true;
+  return { ...all, letter };
 }

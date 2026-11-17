@@ -20,4 +20,6 @@ export const params = {
   cam: q.get('cam'),
   debug: q.has('debug'),
   profile: q.get('perfil'),
+  /** Pista por id (`cuarto`, …). */
+  track: q.get('track'),
 };

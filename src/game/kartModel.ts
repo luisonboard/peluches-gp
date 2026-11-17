@@ -8,12 +8,18 @@ const geoCache = new Map<string, THREE.BufferGeometry>();
 const matCache = new Map<string, THREE.Material>();
 function geo(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
   let g = geoCache.get(key);
-  if (!g) geoCache.set(key, (g = make()));
+  if (!g) {
+    geoCache.set(key, (g = make()));
+    g.userData.shared = true; // compartida por todos los karts: no se libera (render/dispose.ts)
+  }
   return g;
 }
 function mat(key: string, make: () => THREE.Material): THREE.Material {
   let m = matCache.get(key);
-  if (!m) matCache.set(key, (m = make()));
+  if (!m) {
+    matCache.set(key, (m = make()));
+    m.userData.shared = true;
+  }
   return m;
 }
 const plastic = (c: number): THREE.Material => mat(`p${c}`, () => new THREE.MeshStandardMaterial({ color: c, roughness: 0.38, metalness: 0.05 }));

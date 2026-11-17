@@ -6,11 +6,11 @@ import { Rng } from './core/rng';
 import { Loop } from './core/loop';
 import { detectQuality, DynamicResolution, GpuTimer } from './core/quality';
 import { Input } from './input/input';
-import { createStage, followSun } from './render/scene';
+import { createStage, followSun, applyLook } from './render/scene';
+import { disposeTree } from './render/dispose';
 import { makeTextures } from './world/textures';
-import { buildTrack } from './world/trackMesh';
-import { buildRoom } from './world/room';
-import { ROOM_TRACK } from './world/roomTrack';
+import { buildTrack, type TrackVisual } from './world/trackMesh';
+import { readyTrack, type ReadyTrack } from './world/tracks';
 import { Track } from './game/track';
 import { CHARACTERS } from './game/characters';
 import { KartModel } from './game/kartModel';
@@ -47,10 +47,25 @@ const stage = createStage(app, quality);
 const { renderer, scene } = stage;
 const rng = new Rng(params.seed);
 const tex = makeTextures(rng.fork('texturas'), quality.anisotropy);
-const track = new Track(ROOM_TRACK);
-const trackVis = buildTrack(track, tex, quality);
-scene.add(trackVis.group);
-scene.add(buildRoom(track, tex, quality, rng.fork('cuarto')));
+const settings = loadSettings();
+
+// ---------------- Pista ----------------
+// Solo hay una pista montada a la vez. Al cambiar, se libera la anterior (geometrías, materiales y texturas propias).
+let trackEntry!: ReadyTrack;
+let track!: Track;
+let trackVis!: TrackVisual;
+let scenery!: THREE.Group;
+
+function mountTrack(id: string): void {
+  trackEntry = readyTrack(id);
+  track = new Track(trackEntry.def);
+  applyLook(stage, trackEntry.look);
+  trackVis = buildTrack(track, tex, quality, trackEntry.look);
+  // `fork` no avanza el generador: la misma pista sale con el mismo decorado cada vez.
+  scenery = trackEntry.scenery(track, tex, quality, rng.fork(trackEntry.seed));
+  scene.add(trackVis.group, scenery);
+}
+mountTrack(params.track ?? settings.trackId);
 
 const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 1600);
 const chase = new ChaseCam(camera);
@@ -61,9 +76,14 @@ scene.add(sparks.points, dust.points);
 const arena = new Arena(track, tex, sparks, dust, rng.fork('objetos'));
 scene.add(arena.group);
 const plushMats = new PlushMaterials(quality.name !== 'low');
-// Podio en el centro del circuito, mirando hacia la recta de salida.
-const podium = new Podium(new THREE.Vector3(-5 * track.def.scale, 0, 30 * track.def.scale), Math.PI, tex, plushMats, dust);
+const podium = new Podium(new THREE.Vector3(), 0, tex, plushMats, dust);
 scene.add(podium.group);
+/** Podio de la pista (en el cuarto: en el centro del circuito, mirando hacia la recta de salida). */
+function placePodium(): void {
+  const p = trackEntry.podium;
+  podium.place(p.x * track.def.scale, 0, p.z * track.def.scale, p.yaw);
+}
+placePodium();
 
 const audio = new GameAudio(!params.noaudio);
 const input = new Input();
@@ -71,6 +91,21 @@ input.onFirstInteraction = () => audio.unlock();
 input.onFullscreenKey = () => toggleFullscreen();
 const hud = new Hud();
 hud.setTrack(track);
+
+/** Cambia de pista: libera la actual y monta la nueva (arena, podio y minimapa incluidos). `force`: recargar aunque sea la misma. */
+function loadTrack(id: string, force = false): boolean {
+  if (!force && readyTrack(id).id === trackEntry.id) return false;
+  for (const k of karts) disposeTree(k.model.root);
+  karts = [];
+  disposeTree(trackVis.group);
+  disposeTree(scenery);
+  mountTrack(id);
+  arena.setTrack(track);
+  placePodium();
+  hud.setTrack(track);
+  chase.reset();
+  return true;
+}
 
 const loop = new Loop(frame);
 if (params.fps !== null) loop.fpsLimit = params.fps;
@@ -114,7 +149,6 @@ function frameShowroom(side = 0.22, top = 0.3): void {
 }
 let mode: Mode = 'title';
 let titleT = 0;
-const settings = loadSettings();
 const charFromParam = CHARACTERS.findIndex((c) => c.id === params.char || c.defaultName.toLowerCase() === params.char?.toLowerCase());
 if (charFromParam >= 0) settings.charIndex = charFromParam;
 if (params.cpu === 'facil' || params.cpu === 'normal' || params.cpu === 'dificil') settings.cpu = params.cpu;
@@ -122,6 +156,7 @@ if (params.laps) settings.laps = params.laps;
 if (params.profile === 'normal' || params.profile === 'peque') applyProfile(settings, params.profile);
 const setup: TitleSetup = {
   charIndex: settings.charIndex,
+  trackId: trackEntry.id,
   cpu: CPU_LEVELS.find((l) => l.id === settings.cpu) ?? CPU_LEVELS[0],
   laps: settings.laps,
 };
@@ -158,12 +193,13 @@ function storeSetup(): void {
   settings.charIndex = setup.charIndex;
   settings.cpu = setup.cpu.id;
   settings.laps = setup.laps;
+  settings.trackId = setup.trackId;
   saveSettings(settings);
 }
 
 /** `net`: orden de carrera recibido en una partida en línea (el propio kart va primero en la lista local). */
 function buildRace(net?: RosterEntry[]): void {
-  for (const k of karts) scene.remove(k.model.root);
+  for (const k of karts) disposeTree(k.model.root);
   const aiRng = rng.fork(`ia-${Date.now()}`);
   const makeKart = (i: number, c: (typeof CHARACTERS)[number], isPlayer: boolean): Kart => {
     const model = new KartModel(c, quality.shadowMap > 0 ? null : tex.blob, quality.shadowMap > 0, plushMats);
@@ -237,9 +273,11 @@ function showTitle(): void {
     setup,
     (s) => {
       const charChanged = s.charIndex !== setup.charIndex;
+      const trackChanged = s.trackId !== setup.trackId;
       Object.assign(setup, s);
       storeSetup();
-      if (charChanged) {
+      if (trackChanged) loadTrack(setup.trackId);
+      if (charChanged || trackChanged) {
         buildRace();
         placeShowroomKart();
       }
@@ -317,7 +355,8 @@ const session: Session = new Session(
     onLobby: () => {
       if (mode === 'title' && !closeSettings) renderLobby();
     },
-    onStart: (roster, laps, cpu) => {
+    onStart: (roster, laps, cpu, trackId) => {
+      loadTrack(trackId);
       setup.laps = laps;
       setup.cpu = CPU_LEVELS.find((l) => l.id === cpu) ?? CPU_LEVELS[0];
       audio.unlock();
@@ -363,7 +402,7 @@ function openOnline(error?: string, code?: string): void {
     code,
     onCreate: () => {
       showOnlineMenu({ busy: 'Creando la sala…', onCreate: () => {}, onJoin: () => {}, onBack: () => openOnline() });
-      session.create(myChar().id, displayName(myChar()), setup.laps, setup.cpu.id).catch((e: Error) => openOnline(e.message));
+      session.create(myChar().id, displayName(myChar()), setup.laps, setup.cpu.id, trackEntry.id).catch((e: Error) => openOnline(e.message));
     },
     onJoin: (raw) => {
       const c = normalizeCode(raw);
@@ -389,7 +428,15 @@ function renderLobby(): void {
       buildRace();
       placeShowroomKart();
     },
-    options: (laps, cpu) => session.setOptions(laps, cpu),
+    options: (laps, cpu, trackId) => {
+      session.setOptions(laps, cpu, trackId);
+      setup.trackId = trackId;
+      storeSetup();
+      if (loadTrack(trackId)) {
+        buildRace();
+        placeShowroomKart();
+      }
+    },
     start: () => session.start(),
     leave: leaveOnline,
   });
@@ -738,7 +785,13 @@ window.__game = {
   get mode() {
     return mode;
   },
-  track,
+  get track() {
+    return track;
+  },
+  get trackId() {
+    return trackEntry.id;
+  },
+  loadTrack,
   camera,
   renderer,
   scene,

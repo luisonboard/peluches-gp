@@ -5,6 +5,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { Track, Sample } from '../game/track';
 import type { Textures } from './textures';
 import type { Quality } from '../core/quality';
+import type { TrackLook } from './tracks';
 
 const CURB = 1.0;
 /** Distancia extra fuera de la alfombra donde termina la plataforma (ahí se apoyan las barreras). */
@@ -16,7 +17,7 @@ export interface TrackVisual {
   update(dt: number): void;
 }
 
-export function buildTrack(track: Track, tex: Textures, q: Quality): TrackVisual {
+export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackLook): TrackVisual {
   const g = new THREE.Group();
   g.name = 'track';
   const S = track.samples;
@@ -71,12 +72,10 @@ export function buildTrack(track: Track, tex: Textures, q: Quality): TrackVisual
   g.add(ribbon((s) => -s.hw - CURB, (s) => -s.hw, 0.05, 3, curbMat));
   g.add(ribbon((s) => s.hw, (s) => s.hw + CURB, 0.05, 3, curbMat));
 
-  // Franja lateral: alfombra verde en el suelo, cartón en la rampa, fieltro claro en la cama.
+  // Franja lateral, con el color de cada superficie (en el cuarto: alfombra verde, cartón en la rampa, fieltro en la cama).
   const feltMat = new THREE.MeshStandardMaterial({ map: tex.felt, roughness: 1, vertexColors: true });
-  const cFloor = new THREE.Color(0x63a85a);
-  const cRamp = new THREE.Color(0xc99f68);
-  const cBed = new THREE.Color(0xf3ea9c);
-  const shoulderColor = (s: Sample): THREE.Color => (s.surface === 'bed' ? cBed : s.surface === 'ramp' ? cRamp : cFloor);
+  const shoulderCols = new Map(Object.entries(look.shoulder).map(([k, v]) => [k, new THREE.Color(v)]));
+  const shoulderColor = (s: Sample): THREE.Color => shoulderCols.get(s.surface)!;
   g.add(ribbon((s) => -(s.hw + sh + LIP), (s) => -s.hw - CURB, 0.03, 6, feltMat, shoulderColor));
   g.add(ribbon((s) => s.hw + CURB, (s) => s.hw + sh + LIP, 0.03, 6, feltMat, shoulderColor));
 
@@ -111,7 +110,7 @@ export function buildTrack(track: Track, tex: Textures, q: Quality): TrackVisual
     g.add(m);
   }
 
-  // Barreras de juguete: bloques alternos rojo/blanco en el suelo, azul/amarillo en rampa y cama.
+  // Barreras de juguete: bloques de dos colores alternos, según la superficie.
   const spacing = 2.4;
   const per = Math.floor(track.length / spacing);
   const barrierGeo = q.roundedBarriers ? new RoundedBoxGeometry(1.0, 1.3, 2.25, 1, 0.22) : new THREE.BoxGeometry(1.0, 1.3, 2.25);
@@ -124,8 +123,7 @@ export function buildTrack(track: Track, tex: Textures, q: Quality): TrackVisual
   const eul = new THREE.Euler(0, 0, 0, 'YXZ');
   const one = new THREE.Vector3(1, 1, 1);
   const p = new THREE.Vector3();
-  const colA = [new THREE.Color(0xe0392c), new THREE.Color(0xf6f3ee)];
-  const colB = [new THREE.Color(0x2f6fd6), new THREE.Color(0xffd23a)];
+  const barrierCols = new Map(Object.entries(look.barrier).map(([k, [a, b]]) => [k, [new THREE.Color(a), new THREE.Color(b)]]));
   let n = 0;
   for (const side of [-1, 1]) {
     for (let j = 0; j < per; j++) {
@@ -138,7 +136,7 @@ export function buildTrack(track: Track, tex: Textures, q: Quality): TrackVisual
       quat.setFromEuler(eul);
       m4.compose(p, quat, one);
       barriers.setMatrixAt(n, m4);
-      barriers.setColorAt(n, (s.surface === 'floor' ? colA : colB)[j % 2]);
+      barriers.setColorAt(n, barrierCols.get(s.surface)![j % 2]);
       n++;
     }
   }

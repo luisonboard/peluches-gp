@@ -66,6 +66,7 @@ volante, nombres de los peluches y prueba del mando.
 | `?cam=free` | Cámara quieta, para moverla desde DevTools (`__game.camera`) |
 | `?seed=texto` | Semilla de lo procedural |
 | `?perfil=peque\|normal` | Aplica un perfil al cargar |
+| `?track=cuarto` | Pista al cargar (por ahora solo `cuarto`; las que no están listas se ignoran) |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
 | `?noaudio` | Sin audio |
@@ -177,6 +178,25 @@ sin errores, service worker activo y controlando la página, recarga sin red con
 y una sala creada en una pestaña y unida desde otra a través del Worker (transporte "relevo", los dos ven a los dos).
 Repetido con lo publicado en https://peluches-gp.luisonboard.workers.dev: mismos resultados; ida y vuelta
 de un mensaje por el relevo ≈ 68 ms desde Ecuador.
+
+**Hito 7 — pistas intercambiables** (terminado, fase 2):
+
+- Registro de pistas en `src/world/tracks.ts`: cada pista trae su trazado (`TrackDef` con `id` y superficie por
+  punto de control o por altura), su escenario, su luz y cielo (`TrackLook`: niebla, luces, exposición, colores de
+  la franja lateral y de las barreras) y el sitio del podio. Bañera Burbujeante y Jardín de Noche aparecen como
+  "Pronto".
+- `loadTrack(id)` en `main.ts` monta una pista y libera la anterior con `render/dispose.ts`. Lo compartido
+  (texturas de `makeTextures`, cachés de karts y peluches) lleva `userData.shared` y no se libera. Los karts de
+  la carrera anterior también se liberan ahora (antes quedaban ≈ 50 geometrías por carrera).
+- Elección de pista en el título (tarjetas con minimapa) y en la sala (la elige el anfitrión). Se guarda en los
+  ajustes. Protocolo 2: `lobby` y `start` llevan `track`; un dispositivo con la versión anterior recibe
+  "Actualiza el juego".
+
+Comprobado: el Cuarto de Juegos se ve igual que antes (misma vista fija; difiere el 0,1 % de los píxeles, en las
+piezas animadas). 10 cambios de pista seguidos y 5 carreras nuevas: geometrías y texturas estables (98/20 en el
+título, 134/63 en carrera). Carrera completa en automático sin errores. Sala por el relevo con dos pestañas: el
+invitado ve la pista elegida y la carrera corre en los dos. Build de 813 KB. `?bench` en Medio: 60 fps, 2,8 ms de
+GPU, 129 k triángulos.
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

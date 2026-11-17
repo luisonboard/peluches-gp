@@ -14,7 +14,7 @@ export interface SessionHooks {
   /** Cambió la sala de espera: volver a dibujarla. */
   onLobby(): void;
   /** Empieza una carrera. */
-  onStart(roster: RosterEntry[], laps: number, cpu: string): void;
+  onStart(roster: RosterEntry[], laps: number, cpu: string, track: string): void;
   /** El anfitrión volvió a la sala tras la carrera. */
   onMenu(): void;
   /** Error que termina la sesión (se vuelve al menú). */
@@ -33,6 +33,7 @@ export class Session {
   me = 0;
   laps = 3;
   cpu = 'facil';
+  track = 'cuarto';
   racing = false;
   roster: RosterEntry[] = [];
   private host: NetHost | RelayHost | null = null;
@@ -65,10 +66,11 @@ export class Session {
 
   // ---------------- Crear / unirse ----------------
 
-  async create(char: Species, name: string, laps: number, cpu: string): Promise<void> {
+  async create(char: Species, name: string, laps: number, cpu: string, track: string): Promise<void> {
     this.role = 'host';
     this.laps = laps;
     this.cpu = cpu;
+    this.track = track;
     this.transport = (await relayAvailable()) ? 'relevo' : 'directa';
     const h = (this.host = this.transport === 'relevo' ? new RelayHost() : new NetHost());
     this.code = await h.open();
@@ -117,17 +119,18 @@ export class Session {
     } else this.guest?.send({ t: 'pick', char, name });
   }
 
-  setOptions(laps: number, cpu: string): void {
+  setOptions(laps: number, cpu: string, track: string): void {
     if (!this.isHost) return;
     this.laps = laps;
     this.cpu = cpu;
+    this.track = track;
     this.pushLobby();
   }
 
   private pushLobby(): void {
     if (!this.host) return;
     for (const p of this.players) {
-      if (p.peer) this.host.send(p.peer, { t: 'lobby', players: this.players, laps: this.laps, cpu: this.cpu, you: p.slot, racing: this.racing });
+      if (p.peer) this.host.send(p.peer, { t: 'lobby', players: this.players, laps: this.laps, cpu: this.cpu, track: this.track, you: p.slot, racing: this.racing });
     }
     this.hooks.onLobby();
   }
@@ -140,7 +143,7 @@ export class Session {
     const h = this.host!;
     switch (m.t) {
       case 'hello': {
-        if (m.v !== PROTOCOL) return h.send(from, { t: 'reject', why: 'Las versiones del juego no coinciden. Recarguen la página en los dos dispositivos.' });
+        if (m.v !== PROTOCOL) return h.send(from, { t: 'reject', why: 'Actualiza el juego: este dispositivo tiene otra versión. Cierren y vuelvan a abrir el juego en los dos dispositivos.' });
         if (this.players.length >= MAX_PLAYERS) return h.send(from, { t: 'reject', why: 'La sala está llena (6 jugadores).' });
         let slot = 1;
         while (this.players.some((p) => p.slot === slot)) slot++;
@@ -191,15 +194,17 @@ export class Session {
         this.me = m.you;
         this.laps = m.laps;
         this.cpu = m.cpu;
+        this.track = m.track;
         if (!this.racing) this.hooks.onLobby();
         return;
       case 'start':
         this.roster = m.roster;
         this.laps = m.laps;
         this.cpu = m.cpu;
+        this.track = m.track;
         if (m.roster.some((r) => r.owner === this.ownerId)) {
           this.racing = true;
-          this.hooks.onStart(m.roster, m.laps, m.cpu);
+          this.hooks.onStart(m.roster, m.laps, m.cpu, m.track);
         }
         return;
       case 'menu':
@@ -251,8 +256,8 @@ export class Session {
     }
     this.roster = roster;
     this.racing = true;
-    this.host.broadcast({ t: 'start', roster, laps: this.laps, cpu: this.cpu });
-    this.hooks.onStart(roster, this.laps, this.cpu);
+    this.host.broadcast({ t: 'start', roster, laps: this.laps, cpu: this.cpu, track: this.track });
+    this.hooks.onStart(roster, this.laps, this.cpu, this.track);
   }
 
   /** Conecta la carrera recién creada con la red. */

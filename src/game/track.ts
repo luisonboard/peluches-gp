@@ -11,6 +11,8 @@ export interface CtrlPt {
   y: number;
   /** Medio ancho del asfalto (sin escalar). */
   hw: number;
+  /** Superficie del tramo que empieza en este punto. Sin ella, se deduce de la altura (`surfaceByHeight`). */
+  surf?: Surface;
 }
 
 export interface PadDef {
@@ -22,6 +24,8 @@ export interface PadDef {
 }
 
 export interface TrackDef {
+  /** Identificador estable (se guarda en los ajustes y viaja por la red). */
+  id: string;
   name: string;
   /** Escala horizontal de los puntos. */
   scale: number;
@@ -31,6 +35,8 @@ export interface TrackDef {
   pads: PadDef[];
   /** Puntos de control donde van las cajas regalo (hito 2). */
   itemRows: { seg: number; f: number }[];
+  /** Superficie según la altura, para los puntos sin `surf`. Sin ella: suelo. */
+  surfaceByHeight?: (y: number) => Surface;
 }
 
 export interface Sample {
@@ -117,7 +123,7 @@ export class Track {
       const hw = a.hw + (b.hw - a.hw) * fr;
       this.samples.push({
         x: pt.x, y, z: pt.z, tx: tan.x, tz: tan.z, nx: -tan.z, nz: tan.x, hw, slope: 0, curv: 0,
-        s: i * this.step, segF, surface: y > 7.5 ? 'bed' : y > 0.05 ? 'ramp' : 'floor',
+        s: i * this.step, segF, surface: a.surf ?? def.surfaceByHeight?.(y) ?? 'floor',
       });
       const bd = this.bounds;
       bd.minX = Math.min(bd.minX, pt.x);

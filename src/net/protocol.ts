@@ -1,7 +1,8 @@
 // Mensajes entre dispositivos. Topología en estrella: los invitados hablan con el anfitrión y él reenvía.
 import type { ItemId, Species } from '../core/events';
 
-export const PROTOCOL = 1;
+/** 2: la sala y el inicio llevan la pista. */
+export const PROTOCOL = 2;
 export const MAX_PLAYERS = 6;
 
 export interface LobbyPlayer {
@@ -35,9 +36,9 @@ export const HIT_CODES = ['', 'spin', 'stuck', 'bubble', 'shrink', 'tumble'] as 
 export type Msg =
   | { t: 'hello'; v: number; name: string; char: Species }
   | { t: 'reject'; why: string }
-  | { t: 'lobby'; players: LobbyPlayer[]; laps: number; cpu: string; you: number; racing: boolean }
+  | { t: 'lobby'; players: LobbyPlayer[]; laps: number; cpu: string; track: string; you: number; racing: boolean }
   | { t: 'pick'; char: Species; name: string }
-  | { t: 'start'; roster: RosterEntry[]; laps: number; cpu: string }
+  | { t: 'start'; roster: RosterEntry[]; laps: number; cpu: string; track: string }
   | { t: 'st'; k: KartState[] }
   | {
       t: 'use';

@@ -4,6 +4,7 @@ import { CPU_LEVELS } from '../game/race';
 import type { Track } from '../game/track';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
 import type { ItemId } from '../core/events';
+import { TRACKS, trackOutline, type ReadyTrack } from '../world/tracks';
 
 export const ITEM_ICONS: Record<ItemId, string> = {
   turbo: `<svg viewBox="0 0 64 64"><path d="M32 5c10 8 14 21 12 35H20C18 26 22 13 32 5z" fill="#e8423a" stroke="#2a2050" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="25" r="6" fill="#8fd0ff" stroke="#2a2050" stroke-width="3"/><path d="M20 38l-9 11h13zM44 38l9 11H40z" fill="#ffd23a" stroke="#2a2050" stroke-width="3" stroke-linejoin="round"/><path d="M25 43h14l-7 16z" fill="#ff9a2a"/></svg>`,
@@ -89,6 +90,33 @@ const CSS = `
   .pgp-row .pgp-go { font-size: 16px !important; padding: 8px 14px !important; box-shadow: 0 5px 0 rgba(0,0,0,.22) !important; }
   .pgp-screen.title .pgp-row[style*="margin-top"] { margin-top: 8px !important; }
 }
+.pgp-tracks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
+.pgp-track { border: 4px solid transparent; border-radius: 18px; background: #f1effa; padding: 6px 8px; cursor: pointer; font: inherit; color: inherit;
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; text-align: left; min-width: 0; }
+.pgp-track canvas, .pgp-track .lock { width: 56px; height: 42px; border-radius: 10px; background: #fff; display: block; }
+.pgp-track .lock { display: grid; place-items: center; font-size: 22px; background: #e4e1f2; }
+.pgp-track .nm { font-weight: 900; font-size: 15px; line-height: 1.15; }
+.pgp-track .sp { font-size: 11px; font-weight: 700; color: #6a64a0; line-height: 1.2; }
+.pgp-track.sel { border-color: #2a2050; background: #fff; }
+.pgp-track:disabled { cursor: default; opacity: .6; }
+@media (max-width: 620px) {
+  .pgp-track-label { display: none; }
+  .pgp-tracks { margin-top: 10px; }
+  .pgp-track { grid-template-columns: 1fr; justify-items: center; text-align: center; gap: 4px; padding: 4px; }
+  .pgp-track canvas, .pgp-track .lock { width: 44px; height: 33px; font-size: 16px; }
+  .pgp-track .nm { font-size: 12px; }
+  .pgp-track .sp { display: none; }
+}
+@media (max-height: 520px) {
+  .pgp-track-label { display: none; }
+  .pgp-tracks { margin-top: 6px; }
+  .pgp-track { padding: 2px 6px; border-width: 3px; gap: 6px; border-radius: 14px; }
+  .pgp-track canvas, .pgp-track .lock { width: 36px; height: 26px; font-size: 14px; border-radius: 8px; }
+  .pgp-track .nm { font-size: 12px; }
+  .pgp-track .sp { display: none; }
+  .pgp-screen.title .pgp-row[style*="margin-top"] { flex-wrap: nowrap; gap: 8px !important; }
+  .pgp-screen.title .pgp-row[style*="margin-top"] .pgp-go { white-space: nowrap; padding: 8px 12px !important; }
+}
 #hud-item { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%);
   display: grid; justify-items: center; gap: 6px; }
 #hud-item .slot { width: clamp(58px, 11vh, 84px); height: clamp(58px, 11vh, 84px); border-radius: 22px; background: rgba(255,255,255,0.88);
@@ -138,6 +166,7 @@ const CSS = `
 
 export interface TitleSetup {
   charIndex: number;
+  trackId: string;
   cpu: CpuLevel;
   laps: number;
 }
@@ -392,6 +421,27 @@ export class Hud {
     const powerInfo = el('div', 'pgp-power-info');
     card.append(powerInfo);
 
+    card.append(el('div', 'pgp-label pgp-track-label', 'Pista'));
+    const trackRow = el('div', 'pgp-row');
+    const tracks = el('div', 'pgp-tracks');
+    trackRow.append(tracks);
+    const trackBtns = TRACKS.map((t) => {
+      const b = el('button', 'pgp-track');
+      if (t.ready) {
+        b.append(trackThumb(t));
+        b.onclick = () => setTrack(t.id);
+      } else {
+        b.disabled = true;
+        b.append(el('div', 'lock', '🔒'));
+      }
+      const txt = el('div');
+      txt.append(el('div', 'nm', t.name), el('div', 'sp', t.ready ? t.blurb : 'Pronto'));
+      b.append(txt);
+      tracks.append(b);
+      return b;
+    });
+    card.append(trackRow);
+
     const opts = el('div', 'pgp-opts');
     const cpuCol = el('div');
     const lapCol = el('div');
@@ -449,6 +499,7 @@ export class Hud {
       const ch = CHARACTERS[s.charIndex];
       powerInfo.innerHTML = `<b>${displayName(ch)}</b> · ${ch.power}: ${ch.powerDesc.toLowerCase()}`;
       charBtns.forEach((b, i) => b.classList.toggle('sel', i === s.charIndex));
+      trackBtns.forEach((b, i) => b.classList.toggle('sel', TRACKS[i].id === s.trackId));
       cpuBtns.forEach((b, i) => b.classList.toggle('sel', CPU_LEVELS[i].id === s.cpu.id));
       lapBtns.forEach((b, i) => b.classList.toggle('sel', [2, 3][i] === s.laps));
     };
@@ -456,6 +507,17 @@ export class Hud {
       s.charIndex = (i + CHARACTERS.length) % CHARACTERS.length;
       refresh();
       onChange({ ...s });
+    };
+    const readyIds = TRACKS.filter((t) => t.ready).map((t) => t.id);
+    const setTrack = (id: string): void => {
+      if (id === s.trackId) return;
+      s.trackId = id;
+      refresh();
+      onChange({ ...s });
+    };
+    const stepTrack = (d: number): void => {
+      const i = readyIds.indexOf(s.trackId);
+      setTrack(readyIds[Math.max(0, Math.min(readyIds.length - 1, i + d))]);
     };
     const setCpu = (lv: CpuLevel): void => {
       s.cpu = lv;
@@ -472,6 +534,7 @@ export class Hud {
     const cpuIdx = (): number => CPU_LEVELS.findIndex((l) => l.id === s.cpu.id);
     this.menuRows = [
       { el: charRow, left: () => setChar(s.charIndex - 1), right: () => setChar(s.charIndex + 1) },
+      { el: trackRow, left: () => stepTrack(-1), right: () => stepTrack(1) },
       { el: cpuRow, left: () => setCpu(CPU_LEVELS[Math.max(0, cpuIdx() - 1)]), right: () => setCpu(CPU_LEVELS[Math.min(CPU_LEVELS.length - 1, cpuIdx() + 1)]) },
       { el: lapRow, left: () => setLaps(2), right: () => setLaps(3) },
       { el: goRow, ok: onStart, right: onSettings },
@@ -556,4 +619,40 @@ export class Hud {
     }
     this.benchEl.textContent = text;
   }
+}
+
+/** Minimapa pequeño de la pista para su tarjeta del menú (la salida abajo, como en la carrera). */
+function trackThumb(t: ReadyTrack): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  const W = 112;
+  const H = 84;
+  c.width = W;
+  c.height = H;
+  const pts = trackOutline(t);
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const p of pts) {
+    x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+    z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z);
+  }
+  const pad = 10;
+  const sc = Math.min((W - pad * 2) / (x1 - x0), (H - pad * 2) / (z1 - z0));
+  const ox = W / 2 + ((x0 + x1) / 2) * sc;
+  const oz = H / 2 + ((z0 + z1) / 2) * sc;
+  const g = c.getContext('2d')!;
+  g.lineJoin = g.lineCap = 'round';
+  g.beginPath();
+  pts.forEach((p, i) => (i ? g.lineTo(ox - p.x * sc, oz - p.z * sc) : g.moveTo(ox - p.x * sc, oz - p.z * sc)));
+  g.closePath();
+  g.strokeStyle = '#2a2050';
+  g.lineWidth = 9;
+  g.stroke();
+  g.strokeStyle = '#ffd23a';
+  g.lineWidth = 4;
+  g.stroke();
+  const p0 = pts[0];
+  g.fillStyle = '#e8423a';
+  g.beginPath();
+  g.arc(ox - p0.x * sc, oz - p0.z * sc, 5, 0, Math.PI * 2);
+  g.fill();
+  return c;
 }

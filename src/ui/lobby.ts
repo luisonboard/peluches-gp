@@ -4,6 +4,7 @@ import { CHARACTERS, cssColor, displayName } from '../game/characters';
 import { CPU_LEVELS } from '../game/race';
 import type { Species } from '../core/events';
 import type { Session } from '../net/session';
+import { TRACKS } from '../world/tracks';
 
 const CSS = `
 .pgp-lobby { width: min(720px, 100%); box-sizing: border-box; max-height: calc(100dvh - 32px); overflow-y: auto; }
@@ -115,7 +116,7 @@ export function showOnlineMenu(o: { code?: string; error?: string; busy?: string
 }
 
 /** Sala de espera. Se vuelve a dibujar cada vez que cambia. */
-export function showLobby(s: Session, h: { pick: (c: Species) => void; options: (laps: number, cpu: string) => void; start: () => void; leave: () => void }): void {
+export function showLobby(s: Session, h: { pick: (c: Species) => void; options: (laps: number, cpu: string, track: string) => void; start: () => void; leave: () => void }): void {
   const card = screen();
   card.innerHTML = `<h2>${s.isHost ? 'Tu sala' : 'Sala'}</h2>`;
   const row = document.createElement('div');
@@ -195,12 +196,13 @@ export function showLobby(s: Session, h: { pick: (c: Species) => void; options: 
       return col;
     };
     opts.append(
-      mk('Rivales de la IA', CPU_LEVELS.map((l) => [l.id, l.label]), s.cpu, (v) => h.options(s.laps, v)),
-      mk('Vueltas', [['2', '2'], ['3', '3']], String(s.laps), (v) => h.options(Number(v), s.cpu)),
+      mk('Pista', TRACKS.filter((t) => t.ready).map((t) => [t.id, t.name]), s.track, (v) => h.options(s.laps, s.cpu, v)),
+      mk('Rivales de la IA', CPU_LEVELS.map((l) => [l.id, l.label]), s.cpu, (v) => h.options(s.laps, v, s.track)),
+      mk('Vueltas', [['2', '2'], ['3', '3']], String(s.laps), (v) => h.options(Number(v), s.cpu, s.track)),
     );
     card.append(opts);
   } else {
-    card.insertAdjacentHTML('beforeend', `<p class="hint">${s.laps} vueltas · rivales ${CPU_LEVELS.find((l) => l.id === s.cpu)?.label ?? ''}</p>`);
+    card.insertAdjacentHTML('beforeend', `<p class="hint">${escapeHtml(TRACKS.find((t) => t.id === s.track)?.name ?? '')} · ${s.laps} vueltas · rivales ${CPU_LEVELS.find((l) => l.id === s.cpu)?.label ?? ''}</p>`);
   }
 
   const btns = document.createElement('div');

@@ -23,6 +23,8 @@ export interface Settings {
   cpu: 'facil' | 'normal' | 'dificil';
   laps: number;
   charIndex: number;
+  /** Última pista elegida. */
+  trackId: string;
 }
 
 export const PROFILE_DEFAULTS: Record<Profile, Pick<Settings, 'autoAccel' | 'smartSteer' | 'autoPower' | 'voice' | 'cpu'>> = {
@@ -33,7 +35,7 @@ export const PROFILE_DEFAULTS: Record<Profile, Pick<Settings, 'autoAccel' | 'sma
 const KEY = 'pgp.settings';
 
 export function defaultSettings(): Settings {
-  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3 };
+  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3, trackId: 'cuarto' };
 }
 
 export function loadSettings(): Settings {

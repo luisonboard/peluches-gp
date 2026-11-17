@@ -77,7 +77,10 @@ function furTexture(): THREE.Texture {
 const matCache = new Map<string, THREE.Material>();
 function cached(key: string, make: () => THREE.Material): THREE.Material {
   let m = matCache.get(key);
-  if (!m) matCache.set(key, (m = make()));
+  if (!m) {
+    matCache.set(key, (m = make()));
+    m.userData.shared = true; // compartido entre peluches: no se libera (render/dispose.ts)
+  }
   return m;
 }
 
@@ -146,6 +149,7 @@ const SPH = new THREE.SphereGeometry(1, 28, 18);
 const SPH_LO = new THREE.SphereGeometry(1, 14, 10);
 const CONE = new THREE.ConeGeometry(1, 1, 18);
 const CYL = new THREE.CylinderGeometry(1, 1, 1, 14);
+for (const g of [SPH, SPH_LO, CONE, CYL]) g.userData.shared = true;
 
 type V3 = [number, number, number];
 
