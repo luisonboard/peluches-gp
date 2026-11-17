@@ -139,6 +139,29 @@ export class KartModel {
     });
   }
 
+  private lights: THREE.Group | null = null;
+
+  /** Faros (pistas de noche): dos luces delanteras y un haz suave en el suelo. Se crean la primera vez. */
+  setHeadlights(on: boolean): void {
+    if (on && !this.lights) {
+      const g = (this.lights = new THREE.Group());
+      const bulb = mat('headlight', () => new THREE.MeshBasicMaterial({ color: 0xfff6d0, toneMapped: false }));
+      for (const x of [-0.5, 0.5]) {
+        const m = new THREE.Mesh(geo('headlight', () => new THREE.SphereGeometry(0.16, 10, 8)), bulb);
+        m.position.set(x, 0.62, 1.86);
+        g.add(m);
+      }
+      const beam = new THREE.Mesh(
+        geo('beam', () => new THREE.PlaneGeometry(5.5, 10).rotateX(-Math.PI / 2).translate(0, 0.12, 6.6)),
+        mat('beam', () => new THREE.MeshBasicMaterial({ map: beamTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })),
+      );
+      beam.renderOrder = 2;
+      g.add(beam);
+      this.body.add(g);
+    }
+    if (this.lights) this.lights.visible = on;
+  }
+
   update(k: KartPose, dt: number): void {
     const r = this.root;
     this.t += dt;
@@ -196,4 +219,24 @@ export class KartModel {
       this.blob.scale.set(s, 1, s);
     }
   }
+}
+
+let beamTex: THREE.Texture | null = null;
+/** Haz de los faros: un óvalo cálido que se desvanece hacia delante (compartido por todos los karts). */
+function beamTexture(): THREE.Texture {
+  if (beamTex) return beamTex;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 128;
+  const g = c.getContext('2d')!;
+  const grd = g.createRadialGradient(32, 16, 4, 32, 48, 70); // arriba del lienzo = cerca del kart
+  grd.addColorStop(0, 'rgba(255,240,190,0.55)');
+  grd.addColorStop(0.5, 'rgba(255,235,170,0.22)');
+  grd.addColorStop(1, 'rgba(255,230,160,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 128);
+  beamTex = new THREE.CanvasTexture(c);
+  beamTex.colorSpace = THREE.SRGBColorSpace;
+  beamTex.userData.shared = true;
+  return beamTex;
 }

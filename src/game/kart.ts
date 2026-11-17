@@ -333,6 +333,8 @@ export class Kart {
       }
     }
     this.groundY = gy;
+    // Cayó al hueco de un salto: reaparece en la otra orilla, despacio y sin poder ser golpeado un momento.
+    if (this.grounded && tr.inGap(L.i)) this.rescue(L.i);
 
     // Barreras.
     const wallLat = L.hw + tr.shoulder + 0.05 - T.radius * 0.8;
@@ -426,6 +428,27 @@ export class Kart {
     else this.wrongWayT = Math.max(0, this.wrongWayT - dt * 2);
 
     this.syncModel(dt);
+  }
+
+  private rescue(i: number): void {
+    const tr = this.track;
+    const gap = tr.gapOf(i);
+    if (!gap) return;
+    bus.emit('kart:fall', { kart: this.index, x: this.pos.x, y: this.pos.y, z: this.pos.z });
+    const N = tr.N;
+    const t = (gap.i1 + 5) % N;
+    const s = tr.samples[t];
+    const lat = Math.max(-s.hw + 2, Math.min(s.hw - 2, this.lat));
+    this.pos.set(s.x + s.nx * lat, s.y, s.z + s.nz * lat);
+    this.heading = Math.atan2(s.tx, s.tz);
+    this.speed = 10;
+    this.vel.set(s.tx * 10, 0, s.tz * 10);
+    this.vy = 0;
+    this.groundY = s.y;
+    this.boostT = 0;
+    if (this.drift !== 0) this.endDrift(false);
+    this.invulnT = Math.max(this.invulnT, 1.2);
+    tr.locate(this.pos.x, this.pos.z, t, this.loc);
   }
 
   /** Estado compacto para enviarlo por la red. */

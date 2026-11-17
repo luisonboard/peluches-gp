@@ -66,7 +66,7 @@ volante, nombres de los peluches y prueba del mando.
 | `?cam=free` | Cámara quieta, para moverla desde DevTools (`__game.camera`) |
 | `?seed=texto` | Semilla de lo procedural |
 | `?perfil=peque\|normal` | Aplica un perfil al cargar |
-| `?track=cuarto\|bano` | Pista al cargar (las que no están listas se ignoran) |
+| `?track=cuarto\|bano\|jardin` | Pista al cargar |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
 | `?noaudio` | Sin audio |
@@ -218,6 +218,25 @@ parado más de 2 s, vueltas del jugador automático de 31–39 s (el mismo pilot
 de ≈ 33 s, 0 choques contra barreras, 0 % fuera de la pista. `?bench` en Medio: 60 fps, 2,9 ms de GPU, 161 k
 triángulos (con la pasada de sombras); en Bajo (el de los teléfonos): 60 fps, 1,7 ms, 66 k. Cambiar 10 veces
 entre Cuarto y Bañera: memoria estable.
+
+**Hito 9 — Jardín de Noche** (terminado, fase 2):
+
+- Pista `jardin` (`src/world/gardenTrack.ts`, ≈ 990 m) de noche: túnel bajo una maceta tumbada, sendero de
+  piedras, **salto sobre el arroyo**, puente de tabla sobre un charco y bache sobre una manguera.
+- Saltos (`jumps` en la pista): dos filas de **aceleradores a todo el ancho** (de barrera a barrera, también sobre
+  la franja lateral), rampa recta de 14 m que sube 3 m y un hueco de 12 m sin suelo. Con el turbo se cruza
+  desde ≈ 20 m/s; quien cae al agua salpica y reaparece en la otra orilla a 10 m/s ("¡Al agua!"). Con `gap: 0`
+  es un bache (la manguera).
+- Escenario (`src/world/garden.ts`): césped, cerca con farolitos, pared de la casa con ventanas encendidas, luna y
+  estrellas, arroyo con piedras que acaba en un estanque, flores, arbustos, setas que brillan, luciérnagas y
+  luces en el borde de la pista cada 8 m. Todo lo que brilla es emisivo (sin luces puntuales).
+- Faros en los karts en las pistas de noche (`look.night`): dos luces y un haz en el suelo.
+
+Comprobado: 10 carreras con `?autoplay&speed=8&cpu=normal&track=jardin`: las 10 terminan con los 6 karts, nadie
+parado más de 2 s, vueltas del jugador automático de 27–35 s, salto de ≈ 0,7 s en el aire y 4 caídas al agua en
+180 cruces (karts que llegaban sin turbo tras un golpe). Perfil Peque sin tocar nada: 3 vueltas de ≈ 30 s,
+0 choques contra barreras, 0 caídas, 0 % fuera de la pista. `?bench`: Medio 60 fps, 3,8 ms de GPU; Bajo 60 fps,
+1,5 ms, 99 k triángulos. Cambiar 9 veces entre las tres pistas: memoria estable.
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

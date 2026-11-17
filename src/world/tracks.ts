@@ -9,6 +9,8 @@ import { ROOM_TRACK } from './roomTrack';
 import { buildRoom } from './room';
 import { BATH_TRACK } from './bathTrack';
 import { buildBath } from './bath';
+import { GARDEN_TRACK } from './gardenTrack';
+import { buildGarden, MOON_DIR } from './garden';
 
 /** Luz, cielo y colores de la pista. */
 export interface TrackLook {
@@ -22,6 +24,8 @@ export interface TrackLook {
   shoulder: Partial<Record<Surface, number>> & { floor: number };
   /** Pares de colores de las barreras según la superficie. Las que falten usan los del suelo. */
   barrier: Partial<Record<Surface, [number, number]>> & { floor: [number, number] };
+  /** Pista de noche: los karts llevan los faros encendidos. */
+  night?: boolean;
   /** Polvo que levantan los karts fuera del asfalto. Sin él: el color de la franja lateral. */
   dust?: Partial<Record<Surface, number>>;
   /** Faldón bajo los tramos elevados: textura y tinte por superficie (sin tinte: blanco). */
@@ -105,7 +109,33 @@ export const TRACKS: TrackEntry[] = [
     },
     scenery: buildBath,
   },
-  { id: 'jardin', name: 'Jardín de Noche', blurb: 'Luciérnagas y farolitos', ready: false },
+  {
+    id: 'jardin',
+    name: 'Jardín de Noche',
+    blurb: 'Salto sobre el arroyo',
+    ready: true,
+    def: GARDEN_TRACK,
+    seed: 'jardin',
+    podium: { x: 60, z: 55, yaw: Math.PI },
+    look: {
+      night: true,
+      sky: 0x161e40,
+      fog: [200, 700],
+      hemi: { sky: 0x8a9ae0, ground: 0x24382a, intensity: 1.1 },
+      sun: { color: 0xc8d6ff, intensity: 1.7, dir: MOON_DIR },
+      exposure: 1.2,
+      shoulder: { floor: 0x3f7a3a, stone: 0x8a8f99, plank: 0x9a6a3c, ramp: 0xa8743f },
+      dust: { floor: 0x5a8a4a, stone: 0xb8bcc4, plank: 0xb88a5a, ramp: 0xb88a5a },
+      barrier: {
+        floor: [0xffd23a, 0xf6f3ee],
+        stone: [0x8a4fd8, 0xf6f3ee],
+        plank: [0xff9a2a, 0xf6f3ee],
+        ramp: [0xff9a2a, 0xffd23a],
+      },
+      skirt: { tex: 'cardboard', tint: { plank: 0x9a6a3c, ramp: 0xb07a45 } },
+    },
+    scenery: buildGarden,
+  },
 ];
 
 export const DEFAULT_TRACK = 'cuarto';

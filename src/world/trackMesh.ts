@@ -49,6 +49,7 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
     }
     const idx: number[] = [];
     for (let k = 0; k < N; k++) {
+      if (track.inGap(k) || track.inGap(k + 1)) continue; // sin suelo sobre el hueco de un salto
       const a = k * 2;
       idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
@@ -115,6 +116,7 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
     const idx: number[] = [];
     for (let k = 0; k < N; k++) {
       if (S[k].y < 0.02 && S[(k + 1) % N].y < 0.02) continue;
+      if (track.inGap(k) || track.inGap(k + 1)) continue;
       const a = k * 2;
       idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
@@ -154,6 +156,7 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
     for (let j = 0; j < per; j++) {
       const sAlong = j * spacing;
       const i = Math.min(N - 1, Math.floor(sAlong / track.step));
+      if (track.inGap(i)) continue;
       const s = S[i];
       const lat = side * (s.hw + sh + 0.55);
       p.set(s.x + s.nx * lat, s.y + 0.68, s.z + s.nz * lat);

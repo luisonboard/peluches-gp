@@ -207,6 +207,7 @@ function buildRace(net?: RosterEntry[]): void {
   const aiRng = rng.fork(`ia-${Date.now()}`);
   const makeKart = (i: number, c: (typeof CHARACTERS)[number], isPlayer: boolean): Kart => {
     const model = new KartModel(c, quality.shadowMap > 0 ? null : tex.blob, quality.shadowMap > 0, plushMats);
+    model.setHeadlights(!!trackEntry.look.night);
     scene.add(model.root);
     return new Kart(i, c, isPlayer, model, track);
   };
@@ -500,6 +501,22 @@ bus.on('kart:bump', ({ kart, strength }) => {
   audio.bump(strength);
   chase.shake(Math.min(0.5, strength * 0.04));
   input.rumble(Math.min(1, strength * 0.08), 0.3, 150);
+});
+bus.on('kart:fall', ({ kart, x, z }) => {
+  // Chapuzón en el arroyo: salpicadura donde cayó (el kart ya está en la otra orilla).
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * 2;
+    dust.spawn(x + Math.cos(a) * r, 0.3, z + Math.sin(a) * r, Math.cos(a) * 3, 5 + Math.random() * 5, Math.sin(a) * 3, 1, 0.8, 0.3, 0xbfe6ff, 0.9, 1.5, 1.4);
+  }
+  const v = volKart(kart);
+  audio.pop(v);
+  audio.land();
+  if (kart === 0) {
+    hud.toast('¡Al agua! ¡Más rápido la próxima!', '#bfe6ff');
+    input.rumble(0.6, 0.4, 300);
+    chase.reset();
+  }
 });
 bus.on('kart:slip', ({ kart }) => {
   const k = karts[kart];

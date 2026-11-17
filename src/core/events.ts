@@ -11,6 +11,8 @@ export interface EventMap {
   'kart:drift': { kart: number; level: number };
   'kart:hop': { kart: number };
   'kart:land': { kart: number; strength: number };
+  /** Cayó a un hueco (arroyo): `x, y, z` = dónde cayó; ya reapareció al otro lado. */
+  'kart:fall': { kart: number; x: number; y: number; z: number };
   /** Pisó un charco de jabón. */
   'kart:slip': { kart: number };
   /** Golpe recibido. `by` = kart que lo causó (−1 si nadie). */

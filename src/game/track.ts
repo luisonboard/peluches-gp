@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 
 /** Superficie de cada tramo: solo cambia los colores y el polvo (la física es la misma). */
-export type Surface = 'floor' | 'ramp' | 'bed' | 'mat' | 'towel' | 'rim' | 'sponge';
+export type Surface = 'floor' | 'ramp' | 'bed' | 'mat' | 'towel' | 'rim' | 'sponge' | 'stone' | 'plank';
 
 export interface CtrlPt {
   x: number;
@@ -40,8 +40,33 @@ export interface TrackDef {
   slicks?: PadDef[];
   /** Obstáculos que cruzan la pista de lado a lado (patitos de goma). */
   movers?: MoverDef[];
+  /**
+   * Saltos: aceleradores a todo el ancho, rampa recta y, si `gap` > 0, un hueco sin suelo (arroyo, precipicio).
+   * Quien cae al hueco reaparece al otro lado.
+   */
+  jumps?: JumpDef[];
   /** Superficie según la altura, para los puntos sin `surf`. Sin ella: suelo. */
   surfaceByHeight?: (y: number) => Surface;
+}
+
+export interface JumpDef {
+  /** Dónde empieza el hueco (punto de control + fracción). */
+  seg: number;
+  f: number;
+  /** Largo de la rampa (m) y altura que sube. */
+  ramp: number;
+  rise: number;
+  /** Largo del hueco (m; 0 = solo rampa, como un bache) y altura del fondo del hueco. */
+  gap: number;
+  floor: number;
+  /** Aceleradores a todo el ancho antes de la rampa. */
+  boost: boolean;
+}
+
+export interface Gap {
+  i0: number;
+  i1: number;
+  floor: number;
 }
 
 export interface MoverDef {
@@ -95,6 +120,8 @@ export interface Pad {
   lat: number;
   len: number;
   hw: number;
+  /** A todo el ancho (se dibuja de barrera a barrera). */
+  full?: boolean;
 }
 
 export const newLoc = (): Loc => ({ i: 0, f: 0, lat: 0, y: 0, hw: 8, slope: 0, surface: 'floor', nx: 1, nz: 0, tx: 0, tz: 1 });
@@ -109,6 +136,8 @@ export class Track {
   readonly shoulder: number;
   readonly pads: Pad[];
   readonly slicks: Pad[];
+  readonly gaps: Gap[] = [];
+  private readonly gapAt: Uint8Array;
   readonly bounds = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
 
   constructor(readonly def: TrackDef) {
@@ -152,6 +181,32 @@ export class Track {
     }
     const S = this.samples;
     const N = this.N;
+    // Saltos: rampa recta (pendiente constante para que el kart salga despedido) y hueco a la altura del fondo.
+    this.gapAt = new Uint8Array(N);
+    const extraPads: Pad[] = [];
+    for (const j of def.jumps ?? []) {
+      const i0 = this.indexAtSeg(j.seg, j.f);
+      const rampN = Math.round(j.ramp / this.step);
+      for (let k = 1; k <= rampN; k++) {
+        const s = S[(i0 - k + N) % N];
+        s.y += j.rise * (1 - k / rampN);
+        s.surface = 'ramp';
+      }
+      const gapN = Math.round(j.gap / this.step);
+      for (let k = 0; k < gapN; k++) {
+        const i = (i0 + k) % N;
+        S[i].y = j.floor;
+        this.gapAt[i] = 1;
+      }
+      if (gapN) this.gaps.push({ i0, i1: (i0 + gapN) % N, floor: j.floor });
+      if (j.boost) {
+        // Dos filas de aceleradores que cubren asfalto y franja lateral: nadie llega lento a la rampa.
+        for (const back of [rampN + 18, rampN + 9]) {
+          const i = (i0 - back + N) % N;
+          extraPads.push({ i, lat: 0, len: 7, hw: S[i].hw + def.shoulder, full: true });
+        }
+      }
+    }
     const K = 6;
     for (let i = 0; i < N; i++) {
       const p = S[(i - 1 + N) % N];
@@ -160,7 +215,7 @@ export class Track {
       const j = S[(i + K) % N];
       S[i].curv = ((j.tx - S[i].tx) * S[i].nx + (j.tz - S[i].tz) * S[i].nz) / (K * this.step);
     }
-    this.pads = def.pads.map((p) => ({ i: this.indexAtSeg(p.seg, p.f), lat: p.lat, len: 7, hw: 2.3 }));
+    this.pads = def.pads.map((p): Pad => ({ i: this.indexAtSeg(p.seg, p.f), lat: p.lat, len: 7, hw: 2.3 })).concat(extraPads);
     this.slicks = (def.slicks ?? []).map((p) => ({ i: this.indexAtSeg(p.seg, p.f), lat: p.lat, len: 9, hw: 3.2 }));
   }
 
@@ -227,6 +282,17 @@ export class Track {
   pointAt(i: number, lat: number, out: THREE.Vector3): THREE.Vector3 {
     const s = this.samples[((i % this.N) + this.N) % this.N];
     return out.set(s.x + s.nx * lat, s.y, s.z + s.nz * lat);
+  }
+
+  /** La muestra i está sobre un hueco (sin suelo). */
+  inGap(i: number): boolean {
+    return this.gapAt[((i % this.N) + this.N) % this.N] === 1;
+  }
+
+  /** Hueco que contiene la muestra i, si hay. */
+  gapOf(i: number): Gap | undefined {
+    if (!this.inGap(i)) return undefined;
+    return this.gaps.find((g) => (g.i0 <= g.i1 ? i >= g.i0 && i < g.i1 : i >= g.i0 || i < g.i1));
   }
 
   /** Distancia mínima en planta desde (x, z) a la línea central (búsqueda completa). */
