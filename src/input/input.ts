@@ -2,6 +2,7 @@
 // Switch Pro en Chrome/Safari: los botones frontales van por posición
 // (abajo = B de Switch → acelerar, derecha = A → frenar, arriba = X → poder).
 // Cada dispositivo (teclado, mando 0, mando 1…) se puede leer por separado para la pantalla dividida.
+// Los teléfonos usados como mando (`tel…`, ver net/pad.ts) llegan por la red y se guardan con `setRemote`.
 
 export interface Controls {
   steer: number; // -1 izquierda … 1 derecha
@@ -15,8 +16,10 @@ export interface Controls {
 }
 
 export type MenuKey = 'left' | 'right' | 'up' | 'down' | 'ok' | 'back';
-/** `kbd` = teclado; `pad0`, `pad1`… = mando por su índice en la Gamepad API. */
-export type DeviceId = 'kbd' | `pad${number}`;
+/** `kbd` = teclado; `pad0`, `pad1`… = mando por su índice en la Gamepad API; `tel…` = teléfono como mando. */
+export type DeviceId = 'kbd' | `pad${number}` | `tel${string}`;
+
+export const isPhone = (dev: DeviceId): dev is `tel${string}` => dev.startsWith('tel');
 export interface MenuEvent {
   dev: DeviceId;
   key: MenuKey;
@@ -44,6 +47,12 @@ export class Input {
   private padPrev = new Map<number, PadPrev>();
   private padCtl = new Map<number, Controls>();
   private lastPad = -1;
+  /** Último estado recibido de cada teléfono. */
+  private remote = new Map<DeviceId, Controls>();
+  /** Nombre de cada teléfono para la pantalla de unirse ("Teléfono 1"…). */
+  private remoteNames = new Map<DeviceId, string>();
+  /** Vibración de un teléfono (la manda la red). */
+  onRemoteRumble: (dev: DeviceId, ms: number) => void = () => {};
   /** Se llama en la primera interacción (para desbloquear el audio). */
   onFirstInteraction: () => void = () => {};
   onFullscreenKey: () => void = () => {};
@@ -126,6 +135,21 @@ export class Input {
     }
   }
 
+  /** Estado de un teléfono (`null` al desconectarse). */
+  setRemote(dev: DeviceId, c: Controls | null, name?: string): void {
+    if (c) this.remote.set(dev, c);
+    else this.remote.delete(dev);
+    if (name) this.remoteNames.set(dev, name);
+    if (c) this.touch();
+  }
+
+  /** Tecla de menú o pausa que llegó de un teléfono. */
+  pushRemote(dev: DeviceId, key: MenuKey | 'pause'): void {
+    this.touch();
+    if (key === 'pause') this.pauseQueued = true;
+    else this.menuQueue.push({ dev, key });
+  }
+
   private keyboard(): Controls {
     const k = this.keys;
     return {
@@ -142,7 +166,7 @@ export class Input {
   /** Estado combinado de todos los dispositivos (un solo jugador). */
   read(): Controls {
     const c = this.keyboard();
-    for (const p of this.padCtl.values()) {
+    for (const p of [...this.padCtl.values(), ...this.remote.values()]) {
       if (Math.abs(p.steer) > Math.abs(c.steer)) c.steer = p.steer;
       c.throttle = Math.max(c.throttle, p.throttle);
       c.brake = Math.max(c.brake, p.brake);
@@ -157,12 +181,14 @@ export class Input {
   /** Estado de un solo dispositivo (pantalla dividida). Un mando desconectado no hace nada. */
   readDevice(dev: DeviceId): Controls {
     if (dev === 'kbd') return this.keyboard();
+    if (isPhone(dev)) return { ...(this.remote.get(dev) ?? NONE) };
     return { ...(this.padCtl.get(Number(dev.slice(3))) ?? NONE) };
   }
 
   /** Nombre corto del dispositivo para la pantalla de unirse. */
   deviceName(dev: DeviceId): string {
     if (dev === 'kbd') return 'Teclado';
+    if (isPhone(dev)) return `📱 ${this.remoteNames.get(dev) ?? 'Teléfono'}${this.remote.has(dev) ? '' : ' (desconectado)'}`;
     const p = navigator.getGamepads?.()[Number(dev.slice(3))];
     const name = p?.id.replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim().slice(0, 28);
     return name ? `Mando: ${name}` : 'Mando (desconectado)';
@@ -202,6 +228,7 @@ export class Input {
   /** Vibración del mando, si el navegador la permite. `dev`: ese dispositivo (si no, el último mando usado). */
   rumble(strong: number, weak: number, ms: number, dev?: DeviceId): void {
     if (dev === 'kbd') return;
+    if (dev && isPhone(dev)) return this.onRemoteRumble(dev, ms);
     const idx = dev ? Number(dev.slice(3)) : this.lastPad;
     if (idx < 0) return;
     const p = navigator.getGamepads?.()[idx] as (Gamepad & { vibrationActuator?: { playEffect?: (t: string, o: object) => Promise<unknown> } }) | null;

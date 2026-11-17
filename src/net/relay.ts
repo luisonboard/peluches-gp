@@ -97,7 +97,8 @@ export class RelayHost {
 }
 
 export class RelayGuest {
-  readonly id = `g${Math.random().toString(36).slice(2, 10)}`;
+  /** `id` fijo para volver a entrar como el mismo dispositivo (el teléfono-mando al reconectarse). */
+  constructor(readonly id = `g${Math.random().toString(36).slice(2, 10)}`) {}
   private ws: WebSocket | null = null;
   onMsg: (m: Msg) => void = () => {};
   onClose: (text: string) => void = () => {};

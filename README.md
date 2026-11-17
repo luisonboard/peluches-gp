@@ -44,6 +44,11 @@ En el teléfono aparecen botones táctiles (en horizontal). Izquierda: ◀ ▶ (
 pausa. Derecha: Acelerar y Frenar juntos abajo (sin Acelerar si acelera solo), Derrapar al lado, y Objeto y Poder
 juntos encima (en el perfil Peque, un solo botón "¡Usar!"). Ajustes (⚙ en el título o en la pausa): perfil, ayuda de manejo, voz,
 volante, nombres de los peluches y prueba del mando.
+
+**Teléfono como mando** (pantalla dividida): en «👥 2 jugadores» aparece un QR. Al escanearlo, el teléfono abre un
+mando con flechas y OK para los menús, y en la carrera los mismos botones táctiles (o el volante por giroscopio) con
+un HUD mínimo: puesto, vuelta, objeto y barra de poder. La carrera se ve en el computador.
+
 | Menús | Flechas + Enter | Palanca/cruceta + B |
 
 **Turbo de salida**: acelera durante el último segundo de la cuenta atrás (ni antes ni después).
@@ -71,6 +76,7 @@ volante, nombres de los peluches y prueba del mando.
 | `?split` | Abre la pantalla dividida para 2 jugadores (con `?autostart`, empieza con teclado + mando 0; con `?bench`, mide en pantalla dividida) |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
+| `?mando=ABCD` | Abre el teléfono como mando de la pantalla con ese código (lo usa el QR de «2 jugadores»; no carga el juego 3D) |
 | `?noaudio` | Sin audio |
 
 Errores en `window.__errors`; estado en `window.__game` (por ejemplo, `__game.TUNING` para ajustar la física en vivo).
@@ -283,6 +289,33 @@ solo su kart. Copa entera con `?split&autostart&autoplay&copa`: las tres pistas,
 podio final, sin errores. Entrar y salir 5 veces de la pantalla dividida: memoria estable y calidad restaurada.
 `?bench&split`: en Alto (pasa a Medio) 60 fps y 3,2 ms de GPU; en Medio con el Jardín (pasa a Bajo) 60 fps y
 2,3 ms. Falta: la prueba con dos mandos reales y en una tablet de gama media (objetivo ≥ 45 fps en Bajo).
+
+**Hito 13 — Teléfono como mando** (terminado, fase 2):
+
+- En la pantalla de unirse de «2 jugadores» se abre una sala de mandos (`src/net/pad.ts`, `PadHub`) y aparecen un
+  QR y su código. Usa el relevo del mismo servidor (o PeerJS si no hay relevo), igual que el juego en línea.
+- `?mando=ABCD` (`src/pad/phone.ts`) es una página ligera: `src/entry.ts` la carga en vez del juego, sin three.js
+  ni dibujo 3D. Tras tocar «¡Conectar!» (permiso del giroscopio, pantalla siempre encendida con Wake Lock y
+  pantalla completa) muestra lo que le dice el computador:
+  - Unirse: «¡Unirme!», y después flechas (◀ ▶ peluche, ▲ ▼ perfil) y «¡Listo!».
+  - Menús, pausa y resultados: flechas, OK y Atrás, que manejan los menús del computador.
+  - Carrera: los botones de `TouchControls` (sin Acelerar si su perfil acelera solo; «¡Usar!» en Peque) o el volante
+    por giroscopio, más el HUD mínimo (puesto, vuelta, objeto con ruleta y barra de poder).
+  - Si la carrera es de otros: «Entras en la siguiente».
+- El teléfono manda sus controles unas 30 veces por segundo (`pad`) y las teclas de menú y pausa (`pkey`). El
+  computador los guarda como un dispositivo más (`tel1`, `tel2`… en `Input.setRemote`/`readDevice`), así que la
+  pantalla dividida no distingue entre teléfono, mando o teclado. Si un teléfono deja de mandar 0,7 s, se sueltan
+  sus botones. Las vibraciones de su jugador llegan al teléfono (`buzz`; solo Android, Safari no vibra).
+- Al recargar la página o reconectarse, el teléfono conserva su id (sessionStorage) y vuelve como el mismo mando.
+- Fuera de la pantalla dividida, un teléfono conectado se suma a los controles del jugador 1.
+- Desde `localhost` el QR no sirve al teléfono: la pantalla lo avisa. Hay que usar `npm run dev:lan` o la dirección
+  publicada (además, el giroscopio exige HTTPS).
+
+Comprobado en Chrome con dos pestañas (una emulando un teléfono): unirse como jugador 1 desde el teléfono, cambiar
+el perfil y decir «listo», el teclado como jugador 2. En la carrera, Acelerar + ▶ del teléfono mueven y giran solo
+su kart. La pausa desde el teléfono y «Seguir» con OK funcionan. Recargar el teléfono a media carrera lo devuelve
+como «Teléfono 1» a su kart. La versión compilada abre el mando sin cargar el juego. `window.__errors` vacío.
+Falta: la prueba con un iPhone y un Android reales (giroscopio, retraso por el relevo y vibración).
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

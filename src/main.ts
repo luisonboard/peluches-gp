@@ -23,7 +23,8 @@ import { ChaseCam, topCam, showroomCam, podiumCam } from './game/camera';
 import { Podium } from './world/podium';
 import { Particles } from './fx/particles';
 import { GameAudio } from './audio/audio';
-import { Hud, type TitleSetup } from './ui/hud';
+import { Hud, LOCAL_COLORS, type TitleSetup } from './ui/hud';
+import { PadHub } from './net/pad';
 import { Arena } from './game/arena';
 import { PlushMaterials } from './game/plush';
 import { displayName } from './game/characters';
@@ -105,6 +106,20 @@ input.onFirstInteraction = () => audio.unlock();
 input.onFullscreenKey = () => toggleFullscreen();
 const hud = new Hud();
 hud.setTrack(track);
+
+// Teléfonos como mando (se abre la sala de mandos al entrar en «2 jugadores»).
+const pads = new PadHub();
+pads.onControls = (dev, c, label) => input.setRemote(dev, c, label);
+pads.onKey = (dev, k) => input.pushRemote(dev, k);
+pads.onJoin = (dev) => {
+  join?.refresh();
+  hud.toast(`📱 ${pads.label(dev)} conectado`, '#c8f7c5');
+};
+pads.onLeave = (_dev, label) => {
+  join?.refresh();
+  hud.toast(`📱 ${label} se desconectó`, '#ffe9a8');
+};
+input.onRemoteRumble = (dev, ms) => pads.buzz(dev, ms);
 
 /** Cambia de pista: libera la actual y monta la nueva (arena, podio y minimapa incluidos). `force`: recargar aunque sea la misma. */
 function loadTrack(id: string, force = false): boolean {
@@ -505,6 +520,7 @@ function openSplit(): void {
     ],
     summary: splitSummary(),
     deviceName: (d) => input.deviceName(d),
+    phoneUrl: pads.start().then(() => ({ url: pads.url(), code: pads.code })),
     onStart: (players) => {
       join = null;
       startSplit(players);
@@ -921,11 +937,51 @@ function benchFrame(intervalMs: number): void {
   }
 }
 
+// ---------------- Teléfonos como mando ----------------
+
+let padHudT = 0;
+/** Dice a cada teléfono qué mostrar (unirse, manejar, menú) y le manda su HUD mínimo unas 7 veces por segundo. */
+function syncPads(dt: number): void {
+  padHudT += dt;
+  const sendHud = padHudT >= 0.15;
+  if (sendHud) padHudT = 0;
+  for (const dev of pads.devices) {
+    if (join) {
+      const i = join.info(dev);
+      pads.setState(dev, i ? { mode: 'join', who: i.who, name: i.name, color: LOCAL_COLORS[i.who], ready: i.ready } : { mode: 'join', who: -1 });
+      continue;
+    }
+    // En pantalla dividida maneja su jugador; con un solo jugador, el teléfono se suma a los controles del jugador 1.
+    const L = split ? split.devs.indexOf(dev) : 0;
+    const k = L >= 0 ? localKarts()[L] : undefined;
+    const who = k ? { who: L, name: k.name, color: LOCAL_COLORS[L] } : { who: -1 };
+    if (mode === 'race' && k) {
+      const pr = L === 0 ? settings : settings.p2;
+      pads.setState(dev, { mode: 'race', ...who, auto: pr.autoAccel, peque: pr.profile === 'peque' });
+      if (sendHud)
+        pads.setHud(dev, {
+          pos: k.finished && k.place ? k.place : k.position,
+          lap: Math.min(k.lap, setup.laps),
+          laps: setup.laps,
+          item: k.rouletteT > 0 ? '' : k.item ?? '',
+          roul: k.rouletteT > 0,
+          pow: Math.round(k.power * 20) / 20,
+          fin: k.finished,
+        });
+    } else if (mode === 'race') pads.setState(dev, { mode: 'wait', ...who });
+    else pads.setState(dev, { mode: 'menu', ...who, note: mode === 'paused' ? 'Pausa: elige con las flechas' : mode === 'results' ? 'Resultados: elige con las flechas' : undefined });
+  }
+}
+
 // ---------------- Bucle ----------------
 
 function frame(dt: number): void {
   dynRes.sample(loop.lastIntervalMs, dt);
   input.poll();
+  if (pads.open) {
+    pads.tick();
+    syncPads(dt);
+  }
   // Un control por jugador de este dispositivo: en pantalla dividida, cada uno con su teclado o mando.
   const ctls: Controls[] = split ? split.devs.map((d) => input.readDevice(d)) : [input.read()];
   const ctl = ctls[0];
@@ -1123,6 +1179,7 @@ window.__game = {
   },
   /** Para las pruebas: empieza la pantalla dividida con esos dispositivos. */
   startSplit,
+  pads,
   chase2,
   camera2,
   input,

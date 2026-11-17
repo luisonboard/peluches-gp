@@ -73,4 +73,55 @@ export type Msg =
   | { t: 'place'; s: number; place: number; time: number }
   | { t: 'menu' }
   /** Latido: si un dispositivo calla más de 5 s, se le da por desconectado. */
-  | { t: 'ping' };
+  | { t: 'ping' }
+  // --- Teléfono como mando (net/pad.ts) ---
+  /** Teléfono → pantalla: se presenta. */
+  | { t: 'padhi'; v: number }
+  /** Teléfono → pantalla: controles [volante, acelerar, frenar, bits] (bits: 1 derrape, 2 objeto, 4 poder, 8 mirar atrás). */
+  | { t: 'pad'; c: [number, number, number, number] }
+  /** Teléfono → pantalla: tecla de menú o pausa. */
+  | { t: 'pkey'; k: PadKey }
+  /** Pantalla → teléfono: qué mostrar. */
+  | { t: 'padst'; st: PadState }
+  /** Pantalla → teléfono: lo justo del HUD del jugador. */
+  | { t: 'padhud'; h: PadHud }
+  /** Pantalla → teléfono: vibrar. */
+  | { t: 'buzz'; ms: number };
+
+/** Versión del protocolo del mando (va en `padhi`). */
+export const PAD_PROTOCOL = 1;
+export type PadKey = 'left' | 'right' | 'up' | 'down' | 'ok' | 'back' | 'pause';
+
+export interface PadState {
+  /** `menu`: flechas y OK. `join`: pantalla de unirse. `race`: manejar. `wait`: la carrera es de otros. `reject`: versión distinta. */
+  mode: 'menu' | 'join' | 'race' | 'wait' | 'reject';
+  /** Nombre del teléfono ("Teléfono 1"). */
+  label: string;
+  /** Jugador que maneja (0, 1) o −1. */
+  who: number;
+  /** Peluche y color del jugador. */
+  name?: string;
+  color?: string;
+  /** En la pantalla de unirse: ya dijo "listo". */
+  ready?: boolean;
+  /** El kart acelera solo (no hace falta el botón Acelerar). */
+  auto?: boolean;
+  /** Perfil Peque: objeto y poder en un solo botón. */
+  peque?: boolean;
+  /** Texto de ayuda o de error. */
+  note?: string;
+}
+
+export interface PadHud {
+  /** Puesto actual (o de llegada). */
+  pos: number;
+  lap: number;
+  laps: number;
+  /** Objeto en la mano ("" = ninguno). */
+  item: string;
+  /** La ruleta está girando. */
+  roul: boolean;
+  /** Barra de poder 0..1. */
+  pow: number;
+  fin: boolean;
+}
