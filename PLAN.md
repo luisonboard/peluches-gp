@@ -198,3 +198,6 @@ después del 7, ya que no depende de las pistas nuevas.
 1. Puntos de la copa: 10/8/6/4/3/2.
 2. La pantalla dividida va al final (hito 12).
 3. Una copa a medias no se guarda: si se sale, se pierde.
+4. El hito 11 (contrarreloj) se salta por ahora y se hace el 12 (pantalla dividida) antes.
+5. En la pantalla dividida, cada jugador se une con el dispositivo con el que pulsa primero: teclado + mando o
+   dos mandos.

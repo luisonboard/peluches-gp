@@ -50,6 +50,12 @@ export class DynamicResolution {
     return Math.max(0.5, this.base * this.scale);
   }
 
+  /** Cambia el tope de resolución (al cambiar de calidad). */
+  setBase(base: number): void {
+    this.base = base;
+    this.apply();
+  }
+
   apply(): void {
     this.renderer.setPixelRatio(this.pixelRatio);
   }

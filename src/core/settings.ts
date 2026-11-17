@@ -27,6 +27,23 @@ export interface Settings {
   trackId: string;
   /** Eligió la copa de 3 carreras. */
   cup: boolean;
+  /** Jugador 2 de la pantalla dividida (el jugador 1 usa los ajustes de arriba). */
+  p2: PlayerPrefs;
+}
+
+/** Lo que cambia por jugador en la pantalla dividida. */
+export interface PlayerPrefs {
+  profile: Profile;
+  autoAccel: boolean;
+  smartSteer: boolean;
+  autoPower: boolean;
+  charIndex: number;
+}
+
+/** Ayudas de cada perfil (sin tocar la voz ni los rivales, que son comunes). */
+export function profileAssist(p: Profile): Pick<PlayerPrefs, 'autoAccel' | 'smartSteer' | 'autoPower'> {
+  const d = PROFILE_DEFAULTS[p];
+  return { autoAccel: d.autoAccel, smartSteer: d.smartSteer, autoPower: d.autoPower };
 }
 
 export const PROFILE_DEFAULTS: Record<Profile, Pick<Settings, 'autoAccel' | 'smartSteer' | 'autoPower' | 'voice' | 'cpu'>> = {
@@ -37,14 +54,17 @@ export const PROFILE_DEFAULTS: Record<Profile, Pick<Settings, 'autoAccel' | 'sma
 const KEY = 'pgp.settings';
 
 export function defaultSettings(): Settings {
-  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3, trackId: 'cuarto', cup: false };
+  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3, trackId: 'cuarto', cup: false, p2: { profile: 'normal', ...profileAssist('normal'), charIndex: 0 } };
 }
 
 export function loadSettings(): Settings {
   const s = defaultSettings();
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) Object.assign(s, JSON.parse(raw));
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<Settings>;
+      Object.assign(s, saved, { p2: { ...s.p2, ...(saved.p2 ?? {}) } });
+    }
   } catch {
     /* sin almacenamiento: valores por defecto */
   }

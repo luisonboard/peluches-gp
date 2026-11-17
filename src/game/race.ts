@@ -25,8 +25,16 @@ export const CPU_LEVELS: CpuLevel[] = [
   { id: 'dificil', label: 'Difícil', speed: 1.0, driftSkill: 1, startBoost: 0.75 },
 ];
 
-/** Orden de la parrilla: el jugador sale en 4.º lugar. */
+/** Orden de la parrilla: el jugador sale en 4.º lugar (con dos jugadores, 3.º y 4.º, uno al lado del otro). */
 const GRID_SLOT_OF_KART = [3, 0, 1, 2, 4, 5];
+const GRID_SLOT_SPLIT = [3, 2, 0, 1, 4, 5];
+
+/** Un jugador de este dispositivo y sus ayudas (en pantalla dividida hay dos). */
+export interface Pilot {
+  kart: Kart;
+  assist: AssistOpts;
+  autoPower: boolean;
+}
 
 export class Race {
   phase: Phase = 'grid';
@@ -42,9 +50,9 @@ export class Race {
   private readonly ctx: AIContext = { order: [], level: 0, gums: [], hazards: [] };
   /** Para el poder automático del jugador: decide como un piloto atento. */
   private readonly playerCtx: AIContext = { order: [], level: 2, gums: [], hazards: [] };
-  private readonly assisted: KartCtl = { ...NO_CTL };
-  assist: AssistOpts = { autoAccel: false, smartSteer: false };
-  autoPower = false;
+  private readonly assisted: KartCtl[] = [];
+  /** Jugadores de este dispositivo; `update` recibe un control por cada uno, en el mismo orden. */
+  pilots: Pilot[];
   /** Obstáculos de la pista (patitos): la IA y la dirección asistida los esquivan. */
   hazards: readonly Hazard[] = [];
   /** false en los invitados: el anfitrión decide los puestos de llegada. */
@@ -65,6 +73,7 @@ export class Race {
     /** En red, la parrilla sigue el orden común (slot) en todos los dispositivos. */
     private gridBySlot = false,
   ) {
+    this.pilots = [{ kart: karts[0], assist: { autoAccel: false, smartSteer: false }, autoPower: false }];
     this.placeOnGrid();
     arena.reset(karts, () => this.order);
     this.ctx.level = CPU_LEVELS.indexOf(cpu);
@@ -77,7 +86,8 @@ export class Race {
   placeOnGrid(): void {
     const tr = this.karts[0].track;
     this.karts.forEach((k, n) => {
-      const slot = this.gridBySlot ? k.slot : GRID_SLOT_OF_KART[n] ?? n;
+      const table = this.karts[1]?.isPlayer ? GRID_SLOT_SPLIT : GRID_SLOT_OF_KART;
+      const slot = this.gridBySlot ? k.slot : table[n] ?? n;
       const row = Math.floor(slot / 2);
       const col = slot % 2;
       const i = tr.N - 5 - row * 6;
@@ -97,7 +107,8 @@ export class Race {
     this.lastCount = 5;
   }
 
-  update(dt: number, playerCtl: KartCtl, cam: import('three').Camera): void {
+  /** `ctls[i]`: mando del piloto `pilots[i]`. */
+  update(dt: number, ctls: readonly KartCtl[], cam: import('three').Camera): void {
     this.arena.update(dt, this.phase === 'racing' || this.phase === 'done', cam);
     if (this.phase === 'grid') {
       for (const k of this.karts) {
@@ -111,12 +122,15 @@ export class Race {
       const n = Math.ceil(this.countdown);
       if (n < this.lastCount && n >= 1 && n <= 3) bus.emit('race:countdown', { n });
       this.lastCount = n;
-      const pc = this.autoplay ? this.ais[0].drive(this.player, dt, false) : playerCtl;
-      // Turbo de salida: mantener el acelerador durante el último segundo (ni antes ni después).
-      // Con aceleración automática, el turbo de salida llega solo en el último segundo (ayuda para los peques).
-      const autoHold = this.assist.autoAccel && !this.autoplay && this.countdown < 0.75;
-      if (pc.throttle > 0.5 || autoHold) this.player.startHold += dt;
-      else this.player.startHold = 0;
+      this.pilots.forEach((pl, i) => {
+        const k = pl.kart;
+        const pc = this.autoplay ? this.ais[k.index].drive(k, dt, false) : ctls[i] ?? NO_CTL;
+        // Turbo de salida: mantener el acelerador durante el último segundo (ni antes ni después).
+        // Con aceleración automática, el turbo de salida llega solo en el último segundo (ayuda para los peques).
+        const autoHold = pl.assist.autoAccel && !this.autoplay && this.countdown < 0.75;
+        if (pc.throttle > 0.5 || autoHold) k.startHold += dt;
+        else k.startHold = 0;
+      });
       for (const k of this.karts) {
         if (k.remote) k.netUpdate(dt);
         else k.update(dt, NO_CTL, false);
@@ -124,8 +138,10 @@ export class Race {
       if (this.countdown <= 0) {
         this.phase = 'racing';
         bus.emit('race:go');
-        const h = this.player.startHold;
-        if ((this.autoplay && this.rng.chance(0.5)) || (!this.autoplay && h > 0.15 && h < 1.1)) this.player.boost('start', TUNING.startBoost);
+        for (const { kart: k } of this.pilots) {
+          const h = k.startHold;
+          if ((this.autoplay && this.rng.chance(0.5)) || (!this.autoplay && h > 0.15 && h < 1.1)) k.boost('start', TUNING.startBoost);
+        }
         for (const k of this.karts) if (!k.isPlayer && this.rng.chance(this.cpu.startBoost)) k.boost('start', TUNING.startBoost * 0.8);
       }
       return;
@@ -141,18 +157,20 @@ export class Race {
         k.netUpdate(dt);
         continue;
       }
-      const useAi = !k.isPlayer || this.autoplay || k.finished;
-      let ctl = useAi ? this.ais[n].drive(k, dt, true, this.ctx) : playerCtl;
+      const pi = this.pilots.findIndex((p) => p.kart === k);
+      const pl = this.pilots[pi];
+      const useAi = !pl || this.autoplay || k.finished;
+      let ctl = useAi ? this.ais[n].drive(k, dt, true, this.ctx) : ctls[pi] ?? NO_CTL;
       if (!useAi) {
-        ctl = applyAssist(k, playerCtl, this.assist, this.assisted, this.hazards);
-        if (this.autoPower && k.power >= 1) {
+        ctl = applyAssist(k, ctl, pl.assist, (this.assisted[pi] ??= { ...NO_CTL }), this.hazards);
+        if (pl.autoPower && k.power >= 1) {
           this.playerCtx.order = this.order;
           this.playerCtx.gums = this.ctx.gums;
           const ai = this.ais[n].drive(k, dt, true, this.playerCtx);
           ctl.power ||= ai.power;
         }
       }
-      k.assisted = !useAi && this.assist.smartSteer;
+      k.assisted = !useAi && pl.assist.smartSteer;
       k.update(dt, ctl, true);
       if (ctl.item && !this.prevItem[n] && !k.finished) this.arena.useItem(k);
       if (ctl.power && !this.prevPower[n] && !k.finished) this.arena.usePower(k);
@@ -176,15 +194,17 @@ export class Race {
     this.order.forEach((k, i) => (k.position = i + 1));
 
     // Ayuda a rezagados: la IA acelera un poco si va detrás del jugador y afloja si va muy por delante.
+    // Con dos jugadores, la referencia es el promedio de los dos.
     const N = this.player.track.N;
+    const ref = this.pilots.reduce((a, p) => a + p.kart.progress, 0) / this.pilots.length;
     for (const k of this.karts) {
       if (k.isPlayer) continue;
-      const gap = (this.player.progress - k.progress) / N; // vueltas que el jugador le saca
+      const gap = (ref - k.progress) / N; // vueltas que el jugador le saca
       const band = gap > 0 ? Math.min(0.1, gap * 0.25) : Math.max(-0.16, gap * 0.45);
       k.speedMult = this.cpu.speed * (1 + band);
     }
 
-    if (this.phase === 'racing' && this.player.finished) {
+    if (this.phase === 'racing' && this.pilots.every((p) => p.kart.finished)) {
       this.phase = 'done';
       this.doneAt = this.time;
       bus.emit('race:done');

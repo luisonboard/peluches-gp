@@ -68,6 +68,7 @@ volante, nombres de los peluches y prueba del mando.
 | `?perfil=peque\|normal` | Aplica un perfil al cargar |
 | `?track=cuarto\|bano\|jardin` | Pista al cargar |
 | `?copa` | Elige la copa de 3 carreras (con `?autostart`, empieza sola) |
+| `?split` | Abre la pantalla dividida para 2 jugadores (con `?autostart`, empieza con teclado + mando 0; con `?bench`, mide en pantalla dividida) |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
 | `?noaudio` | Sin audio |
@@ -256,6 +257,32 @@ Comprobado: `npm run check:copa` (puntos, desempates, parrilla, flechas y copia 
 `?copa&autostart&autoplay` sin errores: las tres pistas en orden y la parrilla de las carreras 2 y 3 igual a la
 clasificación al revés. Copa en línea con dos pestañas por el relevo: las dos ven la misma clasificación final.
 Menú a 1280 × 720 y 844 × 390 sin botones fuera de la pantalla.
+
+**Hito 11 — Contrarreloj**: se dejó para más adelante (decisión del 17 nov 2026).
+
+**Hito 12 — Pantalla dividida para 2 jugadores** (terminado, fase 2):
+
+- Botón "👥 2 jugadores" en el título (no aparece en el teléfono ni en línea). Usa la pista o la copa, los rivales y
+  las vueltas elegidos en el menú.
+- Pantalla "Pulsa un botón para unirte" (`src/ui/split.ts`): cada jugador se une con su dispositivo (teclado con
+  Enter, o un mando con B) y con ese mismo dispositivo elige peluche (◀ ▶), perfil Peque o Normal (▲ ▼) y dice
+  "listo" (B / Enter). Con los dos listos, empieza. También se puede hacer con el ratón. Se recuerda el peluche y
+  el perfil del jugador 2 (`settings.p2`); el jugador 1 usa los ajustes generales.
+- Entrada por dispositivo (`Input.poll` + `readDevice`): teclado + mando, o dos mandos. Cada kart responde solo a
+  su dispositivo, con su ayuda de manejo y poder automático, y la vibración va al mando de cada uno.
+- La carrera admite varios pilotos locales (`Race.pilots`); los avisos, sacudidas de cámara y vibraciones van al
+  jugador correspondiente (`Kart.localNo` en vez de `kart === 0`). La carrera termina cuando llegan los dos.
+- Dos cámaras de persecución (arriba el jugador 1, abajo el 2) con `setViewport`/`setScissor` y un campo de visión
+  más cerrado; la sombra sigue a cada kart en su vista. HUD por mitad (posición, vuelta, objeto, poder, avisos y
+  etiqueta J1/J2) y minimapa compartido en el centro con un anillo de color por jugador.
+- En pantalla dividida la calidad baja un nivel (Alto → Medio, Medio → Bajo: sombras, partículas y resolución) y
+  vuelve al salir. Vale para carrera suelta y copa (resultados y copa marcan "(J1)" y "(J2)").
+
+Comprobado con dos mandos simulados (Gamepad API): unirse, cambiar peluche y perfil, y cada mando acelera y gira
+solo su kart. Copa entera con `?split&autostart&autoplay&copa`: las tres pistas, puntos de los dos jugadores y
+podio final, sin errores. Entrar y salir 5 veces de la pantalla dividida: memoria estable y calidad restaurada.
+`?bench&split`: en Alto (pasa a Medio) 60 fps y 3,2 ms de GPU; en Medio con el Jardín (pasa a Bajo) 60 fps y
+2,3 ms. Falta: la prueba con dos mandos reales y en una tablet de gama media (objetivo ≥ 45 fps en Bajo).
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

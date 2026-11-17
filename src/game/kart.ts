@@ -128,6 +128,8 @@ export class Kart {
   name = '';
   /** Lo simula otro dispositivo: aquí solo se interpola lo que llega. */
   remote = false;
+  /** Jugador de este dispositivo que lo maneja (0 = jugador 1, 1 = jugador 2); −1 si es de la IA o de otro dispositivo. */
+  localNo = -1;
   private net: number[] | null = null;
   private netAge = 0;
   private prevDrift = false;

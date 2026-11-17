@@ -24,6 +24,8 @@ void main() {
 export class Particles {
   readonly points: THREE.Points;
   private n = 0;
+  /** Tope de partículas vivas (≤ max): baja en pantalla dividida. */
+  limit: number;
   private readonly p: Float32Array;
   private readonly v: Float32Array;
   private readonly life: Float32Array;
@@ -37,6 +39,7 @@ export class Particles {
   private readonly mat: THREE.ShaderMaterial;
 
   constructor(readonly max: number, additive: boolean) {
+    this.limit = max;
     this.p = new Float32Array(max * 3);
     this.v = new Float32Array(max * 3);
     this.life = new Float32Array(max);
@@ -67,7 +70,7 @@ export class Particles {
 
   /** `color` en sRGB hexadecimal (el shader escribe el color tal cual). */
   spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, s0: number, s1: number, color: number, alpha = 1, gravity = 0, drag = 0): void {
-    if (this.n >= this.max) return;
+    if (this.n >= Math.min(this.max, this.limit)) return;
     const i = this.n++;
     this.p.set([x, y, z], i * 3);
     this.v.set([vx, vy, vz], i * 3);

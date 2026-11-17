@@ -23,7 +23,7 @@ const CSS = `
 .pgp-set .names .dot { flex: none; width: 22px; height: 22px; border-radius: 8px; }
 .pgp-set .names input { min-width: 0; width: 100%; border: 2px solid #d8d4ee; border-radius: 10px; padding: 6px 8px; font: inherit; font-weight: 800;
   font-size: 16px; color: #2a2050; background: #fff; -webkit-user-select: text; user-select: text; }
-.pgp-set .pad { font: 600 13px/1.4 ui-monospace, Menlo, monospace; background: #f1effa; border-radius: 10px; padding: 8px 10px; color: #2a2050; }
+.pgp-set .pad { font: 600 13px/1.4 ui-monospace, Menlo, monospace; background: #f1effa; border-radius: 10px; padding: 8px 10px; color: #2a2050; white-space: pre-line; }
 .pgp-set .tilt { font-weight: 800; color: #2a2050; font-variant-numeric: tabular-nums; }
 `;
 

@@ -5,6 +5,7 @@ import type { Track } from '../game/track';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
 import type { ItemId, Species } from '../core/events';
 import type { Cup } from '../game/cup';
+import type { Kart } from '../game/kart';
 import { TRACKS, trackOutline, type ReadyTrack } from '../world/tracks';
 
 export const ITEM_ICONS: Record<ItemId, string> = {
@@ -17,20 +18,20 @@ const ITEM_ORDER: ItemId[] = ['turbo', 'pelota', 'chicle'];
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #hud .stroke { paint-order: stroke fill; -webkit-text-stroke: 6px #2a2050; }
-#hud-pos { position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom));
+#hud .hud-pos { position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom));
   font-size: clamp(56px, 11vh, 104px); font-weight: 900; line-height: 1; letter-spacing: -2px; }
-#hud-pos small { font-size: 0.4em; letter-spacing: 0; }
-#hud-lap { position: absolute; left: max(18px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top));
+#hud .hud-pos small { font-size: 0.4em; letter-spacing: 0; }
+#hud .hud-lap { position: absolute; left: max(18px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top));
   font-size: clamp(22px, 4.2vh, 34px); font-weight: 900; line-height: 1.15; }
-#hud-lap .time { font-size: 0.72em; font-variant-numeric: tabular-nums; opacity: 0.95; }
+#hud .hud-lap .time { font-size: 0.72em; font-variant-numeric: tabular-nums; opacity: 0.95; }
 #hud-map { position: absolute; right: max(14px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top));
   width: clamp(110px, 24vh, 190px); height: clamp(110px, 24vh, 190px); }
-#hud-msg { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-weight: 900;
+#hud .hud-msg { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-weight: 900;
   font-size: clamp(64px, 16vh, 150px); line-height: 1; }
-#hud-msg.small { font-size: clamp(34px, 7vh, 64px); }
-#hud-msg.pop { animation: pgp-pop 0.9s cubic-bezier(.2,1.6,.4,1) both; }
+#hud .hud-msg.small { font-size: clamp(34px, 7vh, 64px); }
+#hud .hud-msg.pop { animation: pgp-pop 0.9s cubic-bezier(.2,1.6,.4,1) both; }
 @keyframes pgp-pop { 0% { transform: scale(0.3); opacity: 0 } 25% { transform: scale(1.12); opacity: 1 } 70% { transform: scale(1); opacity: 1 } 100% { transform: scale(1.05); opacity: 0 } }
-#hud-wrong { position: absolute; left: 0; right: 0; top: 18%; text-align: center; font-size: clamp(30px, 6vh, 52px);
+#hud .hud-wrong { position: absolute; left: 0; right: 0; top: 18%; text-align: center; font-size: clamp(30px, 6vh, 52px);
   font-weight: 900; color: #ffd23a; animation: pgp-blink 0.6s steps(2) infinite; }
 @keyframes pgp-blink { 50% { opacity: 0.25 } }
 .pgp-screen { box-sizing: border-box; position: fixed; inset: 0; z-index: 10; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; pointer-events: auto;
@@ -134,23 +135,23 @@ const CSS = `
   .pgp-screen.title .pgp-row[style*="margin-top"] { flex-wrap: nowrap; gap: 8px !important; }
   .pgp-screen.title .pgp-row[style*="margin-top"] .pgp-go { white-space: nowrap; padding: 8px 12px !important; }
 }
-#hud-item { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%);
+#hud .hud-item { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%);
   display: grid; justify-items: center; gap: 6px; }
-#hud-item .slot { width: clamp(58px, 11vh, 84px); height: clamp(58px, 11vh, 84px); border-radius: 22px; background: rgba(255,255,255,0.88);
+#hud .hud-item .slot { width: clamp(58px, 11vh, 84px); height: clamp(58px, 11vh, 84px); border-radius: 22px; background: rgba(255,255,255,0.88);
   border: 5px solid #2a2050; display: grid; place-items: center; box-shadow: 0 5px 0 rgba(42,32,80,.35); }
-#hud-item .slot svg { width: 78%; height: 78%; }
-#hud-item .slot.empty { background: rgba(255,255,255,0.35); border-color: rgba(42,32,80,0.5); box-shadow: none; }
-#hud-item .slot.spin svg { animation: pgp-wob .12s linear infinite alternate; }
+#hud .hud-item .slot svg { width: 78%; height: 78%; }
+#hud .hud-item .slot.empty { background: rgba(255,255,255,0.35); border-color: rgba(42,32,80,0.5); box-shadow: none; }
+#hud .hud-item .slot.spin svg { animation: pgp-wob .12s linear infinite alternate; }
 @keyframes pgp-wob { from { transform: scale(.85) rotate(-8deg) } to { transform: scale(1) rotate(8deg) } }
-#hud-power { width: clamp(150px, 26vh, 220px); background: rgba(42,32,80,.75); border-radius: 999px; padding: 4px; position: relative; }
-#hud-power .fill { height: 16px; border-radius: 999px; width: 0%; transition: width .15s linear; }
-#hud-power .lbl { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 900; letter-spacing: .03em; color: #fff;
+#hud .hud-power { width: clamp(150px, 26vh, 220px); background: rgba(42,32,80,.75); border-radius: 999px; padding: 4px; position: relative; }
+#hud .hud-power .fill { height: 16px; border-radius: 999px; width: 0%; transition: width .15s linear; }
+#hud .hud-power .lbl { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 900; letter-spacing: .03em; color: #fff;
   text-shadow: 0 1px 0 #2a2050, 0 -1px 0 #2a2050, 1px 0 0 #2a2050, -1px 0 0 #2a2050; white-space: nowrap; }
-#hud-power.ready { animation: pgp-ready .5s ease-in-out infinite alternate; }
+#hud .hud-power.ready { animation: pgp-ready .5s ease-in-out infinite alternate; }
 @keyframes pgp-ready { from { box-shadow: 0 0 0 0 rgba(255,210,58,.0) } to { box-shadow: 0 0 0 6px rgba(255,210,58,.9) } }
 #hud-flash { position: fixed; inset: 0; background: #fffbe0; opacity: 0; pointer-events: none; z-index: 4; transition: opacity .35s ease-out; }
-#hud-toast { position: absolute; left: 0; right: 0; top: 46%; text-align: center; font-weight: 900; font-size: clamp(22px, 4.5vh, 38px); }
-#hud-toast.pop { animation: pgp-toast 1.6s ease-out both; }
+#hud .hud-toast { position: absolute; left: 0; right: 0; top: 46%; text-align: center; font-weight: 900; font-size: clamp(22px, 4.5vh, 38px); }
+#hud .hud-toast.pop { animation: pgp-toast 1.6s ease-out both; }
 @keyframes pgp-toast { 0% { transform: translateY(10px); opacity: 0 } 15% { transform: none; opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }
 .pgp-power-info { margin: 8px 4px 0; font-size: 15px; font-weight: 700; color: #4a4480; }
 .pgp-power-info b { color: #2a2050; }
@@ -177,6 +178,26 @@ const CSS = `
 .pgp-screen.side { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .pgp-screen.side .pgp-card { box-sizing: border-box; }
 .pgp-screen.side table { font-size: 16px; }
+#hud .hud-panel { position: absolute; inset: 0; }
+#hud .hud-tag { display: none; }
+#hud .hud-split-line { display: none; }
+#hud.split .hud-panel { bottom: 50%; }
+#hud.split .hud-panel.p2 { top: 50%; bottom: 0; }
+#hud.split .hud-split-line { display: block; position: absolute; left: 0; right: 0; top: 50%; height: 6px; margin-top: -3px; background: #2a2050; }
+#hud.split #hud-map { top: 50%; transform: translateY(-50%); width: clamp(96px, 19vh, 150px); height: clamp(96px, 19vh, 150px); }
+#hud.split .hud-pos { font-size: clamp(40px, 8vh, 76px); bottom: 10px; }
+#hud.split .hud-lap { font-size: clamp(17px, 3.2vh, 26px); top: 10px; }
+#hud.split .hud-panel.p2 .hud-lap, #hud.split .hud-panel.p2 .hud-item { top: 14px; }
+#hud.split .hud-msg { top: 24%; font-size: clamp(44px, 10vh, 96px); }
+#hud.split .hud-msg.small { font-size: clamp(24px, 5vh, 44px); }
+#hud.split .hud-wrong { top: 14%; font-size: clamp(22px, 4vh, 36px); }
+#hud.split .hud-toast { top: 58%; font-size: clamp(18px, 3.4vh, 30px); }
+#hud.split .hud-item { top: 10px; gap: 4px; }
+#hud.split .hud-item .slot { width: clamp(46px, 8vh, 66px); height: clamp(46px, 8vh, 66px); border-radius: 18px; border-width: 4px; }
+#hud.split .hud-power { width: clamp(120px, 20vh, 180px); }
+#hud.split .hud-tag { display: block; position: absolute; right: calc(clamp(96px, 19vh, 150px) + 28px); bottom: 12px; font-size: clamp(18px, 3.4vh, 28px);
+  font-weight: 900; line-height: 1; }
+#hud.split .hud-panel.p2 .hud-tag { bottom: 12px; }
 #pgp-bench { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; background: rgba(20,18,50,.9); color: #fff;
   font: 600 14px/1.5 ui-monospace, Menlo, monospace; padding: 10px 14px; border-radius: 12px; white-space: pre; pointer-events: none; }
 `;
@@ -204,12 +225,111 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''):
   return e;
 }
 
+/** Color de cada jugador de este dispositivo (anillo del minimapa y etiqueta J1/J2). */
+export const LOCAL_COLORS = ['#ffd23a', '#4ad8ff'];
+
+/** Lo que ve cada jugador en su mitad: posición, vuelta, objeto, poder y avisos. */
+class HudPanel {
+  readonly root = el('div', 'hud-panel');
+  private pos = el('div', 'stroke hud-pos');
+  private lap = el('div', 'stroke hud-lap');
+  private msg = el('div', 'stroke hud-msg');
+  private wrong = el('div', 'stroke hud-wrong', '¡Al revés! ↺');
+  private itemBox = el('div', 'hud-item');
+  private itemSlot = el('div', 'slot');
+  private powerBar = el('div', 'hud-power');
+  private powerFill = el('div', 'fill');
+  private powerLbl = el('div', 'lbl');
+  private toastEl = el('div', 'stroke hud-toast');
+  private tag = el('div', 'stroke hud-tag');
+  private shownItem = '';
+  private lastLapHtml = '';
+  private lastTag = '';
+  private rouletteIdx = 0;
+
+  constructor(n: number) {
+    if (n) this.root.classList.add(`p${n + 1}`);
+    this.powerBar.append(this.powerFill, this.powerLbl);
+    this.itemBox.append(this.itemSlot, this.powerBar);
+    this.root.append(this.pos, this.lap, this.itemBox, this.tag, this.msg, this.toastEl, this.wrong);
+  }
+
+  setRaceVisible(v: boolean): void {
+    for (const e of [this.pos, this.lap, this.itemBox, this.tag]) e.style.display = v ? '' : 'none';
+    if (!v) this.wrong.style.display = 'none';
+  }
+
+  flash(text: string, small: boolean, color: string): void {
+    const m = this.msg;
+    m.textContent = text;
+    m.style.color = color;
+    m.className = `stroke hud-msg${small ? ' small' : ''}`;
+    void m.offsetWidth;
+    m.classList.add('pop');
+  }
+
+  toast(text: string, color: string): void {
+    const t = this.toastEl;
+    t.textContent = text;
+    t.style.color = color;
+    t.className = 'stroke hud-toast';
+    void t.offsetWidth;
+    t.classList.add('pop');
+  }
+
+  private updateItem(p: Kart, touchMode: boolean, split: boolean): void {
+    let key: string;
+    if (p.rouletteT > 0) {
+      this.rouletteIdx = (this.rouletteIdx + 1) % 18;
+      key = `r${Math.floor(this.rouletteIdx / 6)}`;
+      if (key !== this.shownItem) {
+        this.itemSlot.innerHTML = ITEM_ICONS[ITEM_ORDER[Math.floor(this.rouletteIdx / 6)]];
+        this.itemSlot.className = 'slot spin';
+      }
+    } else {
+      key = p.item ?? '';
+      if (key !== this.shownItem) {
+        this.itemSlot.innerHTML = p.item ? ITEM_ICONS[p.item] : '';
+        this.itemSlot.className = p.item ? 'slot' : 'slot empty';
+      }
+    }
+    this.shownItem = key;
+    const pct = Math.round(p.power * 100);
+    this.powerFill.style.width = `${pct}%`;
+    this.powerFill.style.background = cssColor(p.char.color);
+    const ready = p.power >= 1;
+    this.powerBar.classList.toggle('ready', ready);
+    const lbl = ready ? (touchMode || split ? `¡${p.char.power}!` : `¡${p.char.power}! (E · X)`) : p.char.power;
+    if (this.powerLbl.textContent !== lbl) this.powerLbl.textContent = lbl;
+  }
+
+  update(race: Race, p: Kart, touchMode: boolean, split: boolean): void {
+    this.updateItem(p, touchMode, split);
+    const total = race.karts.length;
+    this.pos.innerHTML = `${ordinal(p.position)}<small>/${total}</small>`;
+    this.pos.style.color = ['#ffd23a', '#e6e9f2', '#f0a36a'][p.position - 1] ?? '#ffffff';
+    const lap = Math.max(1, Math.min(race.laps, p.lap));
+    const html = `Vuelta ${lap}/${race.laps}<br><span class="time">${fmtTime(p.finished ? p.finishTime : race.time)}</span>`;
+    if (html !== this.lastLapHtml) this.lap.innerHTML = this.lastLapHtml = html;
+    this.wrong.style.display = p.wrongWayT > 1 && !p.finished && race.phase === 'racing' ? '' : 'none';
+    const tag = split ? `J${p.localNo + 1} · ${p.name}` : '';
+    if (tag !== this.lastTag) {
+      this.tag.textContent = this.lastTag = tag;
+      this.tag.style.color = LOCAL_COLORS[p.localNo] ?? '#fff';
+    }
+  }
+}
+
+/** Etiqueta del kart en las tablas: "(tú)" con un jugador; "(J1)"/"(J2)" en pantalla dividida. */
+function youTag(localNo: number, split: boolean): string {
+  if (localNo < 0) return '';
+  return split ? ` (J${localNo + 1})` : ' (tú)';
+}
+
 export class Hud {
   private root = el('div');
-  private pos = el('div', 'stroke');
-  private lap = el('div', 'stroke');
-  private msg = el('div', 'stroke');
-  private wrong = el('div', 'stroke', '¡Al revés! ↺');
+  private panels: HudPanel[] = [new HudPanel(0)];
+  private splitLine = el('div', 'hud-split-line');
   private map = el('canvas');
   private mapCtx: CanvasRenderingContext2D;
   private mapPath: Path2D | null = null;
@@ -217,47 +337,47 @@ export class Hud {
   private screen: HTMLElement | null = null;
   private menuRows: { el: HTMLElement; left?: () => void; right?: () => void; ok?: () => void }[] = [];
   private focus = 0;
-  private lastLapHtml = '';
   private benchEl: HTMLElement | null = null;
-  private itemBox = el('div');
-  private itemSlot = el('div', 'slot');
-  private powerBar = el('div');
-  private powerFill = el('div', 'fill');
-  private powerLbl = el('div', 'lbl');
   private flashEl = el('div');
-  private toastEl = el('div', 'stroke');
-  private shownItem = '';
   /** En pantallas táctiles no se muestran las teclas. */
   touchMode = false;
-  private rouletteIdx = 0;
+  private raceVisible = false;
 
   constructor() {
     const style = el('style');
     style.textContent = CSS;
     document.head.append(style);
     this.root.id = 'hud';
-    this.pos.id = 'hud-pos';
-    this.lap.id = 'hud-lap';
-    this.msg.id = 'hud-msg';
-    this.wrong.id = 'hud-wrong';
     this.map.id = 'hud-map';
     this.map.width = this.map.height = 380;
     this.mapCtx = this.map.getContext('2d')!;
-    this.itemBox.id = 'hud-item';
-    this.powerBar.id = 'hud-power';
-    this.powerBar.append(this.powerFill, this.powerLbl);
-    this.itemBox.append(this.itemSlot, this.powerBar);
     this.flashEl.id = 'hud-flash';
-    this.toastEl.id = 'hud-toast';
-    this.root.append(this.pos, this.lap, this.map, this.itemBox, this.msg, this.toastEl, this.wrong);
+    this.root.append(this.panels[0].root, this.splitLine, this.map);
     document.body.append(this.flashEl);
     document.body.append(this.root);
     this.setRaceVisible(false);
   }
 
+  /** Uno o dos jugadores en esta pantalla (dos = pantalla dividida, arriba y abajo). */
+  setPlayers(n: 1 | 2): void {
+    if (n === 2 && this.panels.length < 2) {
+      this.panels.push(new HudPanel(1));
+      this.root.insertBefore(this.panels[1].root, this.splitLine);
+    }
+    this.panels[1]?.root.style.setProperty('display', n === 2 ? '' : 'none');
+    this.root.classList.toggle('split', n === 2);
+    this.setRaceVisible(this.raceVisible);
+  }
+
+  private get active(): HudPanel[] {
+    return this.root.classList.contains('split') ? this.panels : this.panels.slice(0, 1);
+  }
+
   setRaceVisible(v: boolean): void {
-    for (const e of [this.pos, this.lap, this.map, this.itemBox]) e.style.display = v ? '' : 'none';
-    if (!v) this.wrong.style.display = 'none';
+    this.raceVisible = v;
+    this.map.style.display = v ? '' : 'none';
+    this.panels.forEach((p) => p.setRaceVisible(v));
+    this.splitLine.style.visibility = v ? '' : 'hidden';
   }
 
   setTrack(track: Track): void {
@@ -281,14 +401,10 @@ export class Hud {
     return [this.mapXf.ox - x * this.mapXf.s, this.map.height - (this.mapXf.oz + z * this.mapXf.s)];
   }
 
-  /** Mensaje grande animado en el centro. */
-  flash(text: string, small = false, color = '#ffffff'): void {
-    const m = this.msg;
-    m.textContent = text;
-    m.style.color = color;
-    m.className = `stroke${small ? ' small' : ''}`;
-    void m.offsetWidth;
-    m.classList.add('pop');
+  /** Mensaje grande animado en el centro. `player`: solo en la mitad de ese jugador (si no, en todas). */
+  flash(text: string, small = false, color = '#ffffff', player?: number): void {
+    const ps = player === undefined ? this.active : [this.active[player] ?? this.active[0]];
+    for (const p of ps) p.flash(text, small, color);
   }
 
   /** Destello de pantalla (rayo). */
@@ -301,53 +417,15 @@ export class Hud {
     f.style.opacity = '0';
   }
 
-  /** Aviso corto a media pantalla ("¡Te dio Chispa!"). */
-  toast(text: string, color = '#ffffff'): void {
-    const t = this.toastEl;
-    t.textContent = text;
-    t.style.color = color;
-    t.className = 'stroke';
-    void t.offsetWidth;
-    t.classList.add('pop');
-  }
-
-  private updateItem(race: Race): void {
-    const p = race.player;
-    let key: string;
-    if (p.rouletteT > 0) {
-      this.rouletteIdx = (this.rouletteIdx + 1) % 18;
-      key = `r${Math.floor(this.rouletteIdx / 6)}`;
-      if (key !== this.shownItem) {
-        this.itemSlot.innerHTML = ITEM_ICONS[ITEM_ORDER[Math.floor(this.rouletteIdx / 6)]];
-        this.itemSlot.className = 'slot spin';
-      }
-    } else {
-      key = p.item ?? '';
-      if (key !== this.shownItem) {
-        this.itemSlot.innerHTML = p.item ? ITEM_ICONS[p.item] : '';
-        this.itemSlot.className = p.item ? 'slot' : 'slot empty';
-      }
-    }
-    this.shownItem = key;
-    const pct = Math.round(p.power * 100);
-    this.powerFill.style.width = `${pct}%`;
-    this.powerFill.style.background = cssColor(p.char.color);
-    const ready = p.power >= 1;
-    this.powerBar.classList.toggle('ready', ready);
-    const lbl = ready ? (this.touchMode ? `¡${p.char.power}!` : `¡${p.char.power}! (E · X)`) : p.char.power;
-    if (this.powerLbl.textContent !== lbl) this.powerLbl.textContent = lbl;
+  /** Aviso corto a media pantalla ("¡Te dio Chispa!"). `player`: solo en su mitad. */
+  toast(text: string, color = '#ffffff', player?: number): void {
+    const ps = player === undefined ? this.active : [this.active[player] ?? this.active[0]];
+    for (const p of ps) p.toast(text, color);
   }
 
   update(race: Race): void {
-    this.updateItem(race);
-    const p = race.player;
-    const total = race.karts.length;
-    this.pos.innerHTML = `${ordinal(p.position)}<small>/${total}</small>`;
-    this.pos.style.color = ['#ffd23a', '#e6e9f2', '#f0a36a'][p.position - 1] ?? '#ffffff';
-    const lap = Math.max(1, Math.min(race.laps, p.lap));
-    const html = `Vuelta ${lap}/${race.laps}<br><span class="time">${fmtTime(p.finished ? p.finishTime : race.time)}</span>`;
-    if (html !== this.lastLapHtml) this.lap.innerHTML = this.lastLapHtml = html;
-    this.wrong.style.display = p.wrongWayT > 1 && !p.finished && race.phase === 'racing' ? '' : 'none';
+    const split = race.pilots.length > 1;
+    race.pilots.forEach((pl, i) => this.panels[i]?.update(race, pl.kart, this.touchMode, split));
     this.drawMap(race);
   }
 
@@ -363,15 +441,16 @@ export class Hud {
     g.lineWidth = 18;
     g.strokeStyle = 'rgba(255,255,255,0.92)';
     g.stroke(this.mapPath);
-    const order = [...race.karts].sort((a, b) => (a.isPlayer ? 1 : 0) - (b.isPlayer ? 1 : 0));
+    const order = [...race.karts].sort((a, b) => a.localNo - b.localNo);
     for (const k of order) {
+      const me = k.localNo >= 0;
       const [x, y] = this.mapPt(k.pos.x, k.pos.z);
       g.beginPath();
-      g.arc(x, y, k.isPlayer ? 15 : 11, 0, Math.PI * 2);
+      g.arc(x, y, me ? 15 : 11, 0, Math.PI * 2);
       g.fillStyle = cssColor(k.char.kart);
       g.fill();
-      g.lineWidth = k.isPlayer ? 6 : 4;
-      g.strokeStyle = k.isPlayer ? '#ffd23a' : '#2a2050';
+      g.lineWidth = me ? 6 : 4;
+      g.strokeStyle = me ? LOCAL_COLORS[k.localNo] ?? LOCAL_COLORS[0] : '#2a2050';
       g.stroke();
     }
   }
@@ -415,7 +494,7 @@ export class Hud {
     }
   }
 
-  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string, onFullscreen: (() => void) | null, onOnline: () => void): void {
+  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string, onFullscreen: (() => void) | null, onOnline: () => void, onSplit: (() => void) | null = null): void {
     const wrap = el('div');
     wrap.style.width = 'min(760px, 100%)';
     const logo = el('div', 'pgp-logo');
@@ -508,7 +587,15 @@ export class Hud {
     const online = el('button', 'pgp-go', '👫 Jugar con otros');
     online.style.cssText = 'margin:0;background:#f07ab0;box-shadow:0 7px 0 #b84a80;font-size:20px;padding:12px 22px';
     online.onclick = () => onOnline();
-    goRow.append(go, online, gear);
+    goRow.append(go, online);
+    if (onSplit) {
+      // Pantalla dividida: solo en computador o tablet con mandos (no en el teléfono).
+      const sp = el('button', 'pgp-go', '👥 2 jugadores');
+      sp.style.cssText = 'margin:0;background:#ff9a2a;box-shadow:0 7px 0 #c26a10;font-size:20px;padding:12px 22px';
+      sp.onclick = () => onSplit();
+      goRow.append(sp);
+    }
+    goRow.append(gear);
     if (onFullscreen) {
       const fs = el('button', 'pgp-go', '⛶');
       fs.title = 'Pantalla completa';
@@ -615,8 +702,15 @@ export class Hud {
   showResults(race: Race, onAgain: () => void, onMenu: () => void, againLabel = 'Otra carrera', menuLabel = 'Menú'): void {
     const card = el('div', 'pgp-card pgp-results');
     card.style.width = 'min(560px, 100%)';
-    const p = race.player;
-    const title = p.place === 1 ? '¡Ganaste! 🏆' : p.place <= 3 ? `¡${ordinal(p.place)} lugar! 🎉` : `Llegaste ${ordinal(p.place)}`;
+    let title: string;
+    if (race.pilots.length > 1) {
+      // Pantalla dividida: el título habla del mejor de los dos.
+      const best = race.pilots.map((pl) => pl.kart).sort((a, b) => (a.place || 99) - (b.place || 99))[0];
+      title = best.place === 1 ? `¡Ganó ${best.name}! 🏆` : best.place <= 3 ? `¡${best.name}, ${ordinal(best.place)} lugar! 🎉` : 'Carrera terminada';
+    } else {
+      const p = race.player;
+      title = p.place === 1 ? '¡Ganaste! 🏆' : p.place <= 3 ? `¡${ordinal(p.place)} lugar! 🎉` : `Llegaste ${ordinal(p.place)}`;
+    }
     card.append(el('h2', '', title));
     const table = el('table');
     card.append(table);
@@ -642,14 +736,16 @@ export class Hud {
    * Clasificación de la copa tras una carrera (o la final). `me`: el peluche de este jugador.
    * `onNext` null = este dispositivo espera al anfitrión (se muestra `wait`).
    */
-  showCup(cup: Cup, me: Species | null, o: { onNext: (() => void) | null; nextLabel: string; onMenu: () => void; menuLabel: string; wait?: string }): void {
+  showCup(cup: Cup, me: Species[], o: { onNext: (() => void) | null; nextLabel: string; onMenu: () => void; menuLabel: string; wait?: string }): void {
     this.resultsTable = null;
     const rows = cup.standings();
-    const mine = rows.find((r) => r.char === me);
+    const split = me.length > 1;
+    const mine = rows.find((r) => me.includes(r.char));
     const card = el('div', 'pgp-card pgp-results pgp-cup');
     card.style.width = 'min(560px, 100%)';
     let title = `Copa Peluche · ${cup.raced} de ${cup.total}`;
-    if (cup.done && mine) title = mine.rank === 1 ? '¡Ganaste la copa! 🏆' : mine.rank <= 3 ? `¡${ordinal(mine.rank)} en la copa! 🏆` : 'Copa terminada';
+    if (cup.done && mine && split) title = mine.rank === 1 ? `¡${mine.name} ganó la copa! 🏆` : mine.rank <= 3 ? `¡${mine.name}, ${ordinal(mine.rank)} en la copa! 🏆` : 'Copa terminada';
+    else if (cup.done && mine) title = mine.rank === 1 ? '¡Ganaste la copa! 🏆' : mine.rank <= 3 ? `¡${ordinal(mine.rank)} en la copa! 🏆` : 'Copa terminada';
     card.append(el('h2', '', title));
     const next = TRACKS.find((t) => t.id === cup.trackId);
     card.append(el('div', 'sub', cup.done ? 'Clasificación final' : `Siguiente: ${next?.name ?? ''}`));
@@ -658,8 +754,9 @@ export class Hud {
       .map((r) => {
         const c = CHARACTERS.find((x) => x.id === r.char);
         const mv = r.rank < r.prevRank ? ['up', '▲'] : r.rank > r.prevRank ? ['down', '▼'] : ['', ''];
-        return `<tr class="${r.char === me ? 'me' : ''}"><td>${ordinal(r.rank)}</td><td class="mv ${mv[0]}">${mv[1]}</td>
-        <td><span class="dot" style="background:${c ? cssColor(c.kart) : '#888'}"></span>${r.name}${r.char === me ? ' (tú)' : ''}</td>
+        const ln = me.indexOf(r.char);
+        return `<tr class="${ln >= 0 ? 'me' : ''}"><td>${ordinal(r.rank)}</td><td class="mv ${mv[0]}">${mv[1]}</td>
+        <td><span class="dot" style="background:${c ? cssColor(c.kart) : '#888'}"></span>${r.name}${youTag(ln, split)}</td>
         <td class="add">${r.last ? '+' + r.last : ''}</td><td class="tot">${r.points}</td></tr>`;
       })
       .join('');
@@ -689,8 +786,8 @@ export class Hud {
     if (!this.resultsTable) return;
     this.resultsTable.innerHTML = race.order
       .map(
-        (k) => `<tr class="${k.isPlayer ? 'me' : ''}"><td>${k.finished ? ordinal(k.place) : '…'}</td>
-        <td><span class="dot" style="background:${cssColor(k.char.kart)}"></span>${k.name}${k.isPlayer ? ' (tú)' : ''}</td>
+        (k) => `<tr class="${k.localNo >= 0 ? 'me' : ''}"><td>${k.finished ? ordinal(k.place) : '…'}</td>
+        <td><span class="dot" style="background:${cssColor(k.char.kart)}"></span>${k.name}${youTag(k.localNo, race.pilots.length > 1)}</td>
         <td style="text-align:right">${k.finished ? fmtTime(k.finishTime) : 'en carrera'}</td></tr>`,
       )
       .join('');

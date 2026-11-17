@@ -29,19 +29,29 @@ export function createStage(container: HTMLElement, q: Quality): Stage {
   scene.add(hemi);
   const sun = new THREE.DirectionalLight();
   const sunDir = new THREE.Vector3(0, 1, 0);
-  sun.castShadow = q.shadowMap > 0;
-  if (sun.castShadow) {
-    sun.shadow.mapSize.set(q.shadowMap, q.shadowMap);
-    const c = sun.shadow.camera;
-    c.left = c.bottom = -48;
-    c.right = c.top = 48;
-    c.near = 1;
-    c.far = 400;
-    sun.shadow.bias = -0.0005;
-    sun.shadow.normalBias = 0.04;
-  }
+  const c = sun.shadow.camera;
+  c.left = c.bottom = -48;
+  c.right = c.top = 48;
+  c.near = 1;
+  c.far = 400;
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.04;
   scene.add(sun, sun.target);
-  return { renderer, scene, sun, hemi, sunDir };
+  const stage = { renderer, scene, sun, hemi, sunDir };
+  setShadows(stage, q.shadowMap);
+  return stage;
+}
+
+/** Sombras del sol con un mapa de `size` texeles (0 = sin sombras). Se puede llamar en plena partida. */
+export function setShadows(stage: Stage, size: number): void {
+  const { renderer, sun } = stage;
+  renderer.shadowMap.enabled = size > 0;
+  sun.castShadow = size > 0;
+  if (sun.shadow.map && (size === 0 || sun.shadow.mapSize.x !== size)) {
+    sun.shadow.map.dispose();
+    sun.shadow.map = null;
+  }
+  if (size > 0) sun.shadow.mapSize.set(size, size);
 }
 
 /** Cielo, niebla y luces de la pista (se llama al cargar cada pista). */

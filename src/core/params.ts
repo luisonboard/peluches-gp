@@ -24,4 +24,6 @@ export const params = {
   track: q.get('track'),
   /** Copa de 3 carreras (con `?autostart` empieza sola). */
   copa: q.has('copa'),
+  /** Pantalla dividida para 2 jugadores (con `?autostart`: teclado + mando 0). */
+  split: q.has('split'),
 };

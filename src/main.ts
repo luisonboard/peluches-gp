@@ -4,9 +4,9 @@ import { bus, installErrorHooks } from './core/events';
 import { params } from './core/params';
 import { Rng } from './core/rng';
 import { Loop } from './core/loop';
-import { detectQuality, DynamicResolution, GpuTimer } from './core/quality';
-import { Input } from './input/input';
-import { createStage, followSun, applyLook } from './render/scene';
+import { detectQuality, DynamicResolution, GpuTimer, PRESETS, type QualityName } from './core/quality';
+import { Input, type Controls, type DeviceId } from './input/input';
+import { createStage, followSun, applyLook, setShadows } from './render/scene';
 import { disposeTree } from './render/dispose';
 import { makeTextures } from './world/textures';
 import { buildTrack, type TrackVisual } from './world/trackMesh';
@@ -27,7 +27,8 @@ import { Hud, type TitleSetup } from './ui/hud';
 import { Arena } from './game/arena';
 import { PlushMaterials } from './game/plush';
 import { displayName } from './game/characters';
-import { loadSettings, saveSettings, applyProfile } from './core/settings';
+import { loadSettings, saveSettings, applyProfile, profileAssist, type Profile } from './core/settings';
+import { openSplitJoin, type SplitPlayer } from './ui/split';
 import { Gyro } from './input/gyro';
 import { TouchControls, isTouchDevice } from './input/touch';
 import { Voice } from './audio/voice';
@@ -46,6 +47,9 @@ installPwa();
 
 const app = document.getElementById('app')!;
 const quality = detectQuality(params.quality);
+/** Calidad elegida (o detectada); en pantalla dividida se baja un nivel y al salir se vuelve a esta. */
+const baseQuality: QualityName = quality.name;
+const LOWER: Record<QualityName, QualityName> = { high: 'medium', medium: 'low', low: 'low' };
 const stage = createStage(app, quality);
 const { renderer, scene } = stage;
 const rng = new Rng(params.seed);
@@ -75,6 +79,10 @@ mountTrack(params.track ?? (wantsCup ? CUP_TRACKS[0] : settings.trackId));
 
 const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 1600);
 const chase = new ChaseCam(camera);
+// Jugador 2 de la pantalla dividida: su propia cámara (mitad de abajo).
+const camera2 = new THREE.PerspectiveCamera(68, 1, 0.3, 1600);
+const chase2 = new ChaseCam(camera2);
+const chases = [chase, chase2];
 const sparks = new Particles(quality.particles, true);
 const dust = new Particles(Math.round(quality.particles * 0.6), false);
 scene.add(sparks.points, dust.points);
@@ -110,8 +118,19 @@ function loadTrack(id: string, force = false): boolean {
   arena.setTrack(track);
   placePodium();
   hud.setTrack(track);
-  chase.reset();
+  for (const c of chases) c.reset();
   return true;
+}
+
+/** Cambia el preset en plena partida (sombras, partículas, resolución) y vuelve a montar la pista con él. */
+function applyQuality(name: QualityName): void {
+  if (quality.name === name) return;
+  Object.assign(quality, PRESETS[name]);
+  setShadows(stage, quality.shadowMap);
+  sparks.limit = quality.particles;
+  dust.limit = Math.round(quality.particles * 0.6);
+  dynRes.setBase(Math.min(devicePixelRatio, quality.maxPixelRatio));
+  loadTrack(trackEntry.id, true);
 }
 
 const loop = new Loop(frame);
@@ -172,6 +191,10 @@ let race: Race;
 let karts: Kart[] = [];
 /** Copa local en curso (en línea la lleva la sesión). */
 let cup: Cup | null = null;
+/** Pantalla dividida en curso: el dispositivo de cada jugador (jugador 1 arriba, jugador 2 abajo). */
+let split: { devs: [DeviceId, DeviceId] } | null = null;
+/** Pantalla "Pulsa un botón para unirte" abierta. */
+let join: ReturnType<typeof openSplitJoin> | null = null;
 const activeCup = (): Cup | null => (session.active ? session.cup : cup);
 /** Pista que se ve en el menú: la elegida, o la primera de la copa. */
 const titleTrack = (): string => (setup.cup ? CUP_TRACKS[0] : setup.trackId);
@@ -194,11 +217,17 @@ function applySettings(): void {
   audio.muted = !settings.sfx;
   touch.configure(settings);
   if (race) {
-    race.assist = { autoAccel: settings.autoAccel, smartSteer: settings.smartSteer };
-    race.autoPower = settings.autoPower;
-    const p = karts[0];
-    p.hitScale = settings.profile === 'peque' ? 0.85 : 1;
-    p.driftChargeMult = settings.smartSteer ? 0.8 : 1;
+    // Jugador 1 con los ajustes generales; jugador 2 (pantalla dividida) con los suyos.
+    const prefs = [settings, settings.p2];
+    race.pilots = karts
+      .filter((k) => k.localNo >= 0)
+      .sort((a, b) => a.localNo - b.localNo)
+      .map((k) => {
+        const pr = prefs[k.localNo];
+        k.hitScale = pr.profile === 'peque' ? 0.85 : 1;
+        k.driftChargeMult = pr.smartSteer ? 0.8 : 1;
+        return { kart: k, assist: { autoAccel: pr.autoAccel, smartSteer: pr.smartSteer }, autoPower: pr.autoPower };
+      });
   }
 }
 
@@ -227,6 +256,7 @@ function buildRace(net?: RosterEntry[]): void {
     karts = ordered.map((e, i) => {
       const c = CHARACTERS.find((x) => x.id === e.char)!;
       const k = makeKart(i, c, e === mine);
+      k.localNo = e === mine ? 0 : -1;
       k.slot = e.slot;
       k.name = e.name || displayName(c);
       // El anfitrión simula su kart y la IA; cada invitado solo el suyo.
@@ -234,10 +264,12 @@ function buildRace(net?: RosterEntry[]): void {
       return k;
     });
   } else {
-    const others = CHARACTERS.filter((_, i) => i !== setup.charIndex);
-    const roster = [CHARACTERS[setup.charIndex], ...others];
+    // Los jugadores de este dispositivo van primero (en pantalla dividida, el 1 y el 2).
+    const mine = split ? [setup.charIndex, settings.p2.charIndex] : [setup.charIndex];
+    const roster = [...mine.map((i) => CHARACTERS[i]), ...CHARACTERS.filter((_, i) => !mine.includes(i))];
     karts = roster.map((c, i) => {
-      const k = makeKart(i, c, i === 0);
+      const k = makeKart(i, c, i < mine.length);
+      k.localNo = i < mine.length ? i : -1;
       k.slot = i;
       k.name = displayName(c);
       return k;
@@ -246,13 +278,13 @@ function buildRace(net?: RosterEntry[]): void {
   // En la copa, el último de la clasificación sale primero.
   const grid = !net && cup ? cup.gridOrder() : null;
   if (grid) for (const k of karts) k.slot = Math.max(0, grid.indexOf(k.char.id));
-  const ais = karts.map((_, i) => new AIDriver(aiRng.fork(`p${i}`), i === 0 ? 0.8 : setup.cpu.driftSkill));
+  const ais = karts.map((k, i) => new AIDriver(aiRng.fork(`p${i}`), k.isPlayer ? 0.8 : setup.cpu.driftSkill));
   race = new Race(karts, ais, setup.laps, setup.cpu, net ? false : params.autoplay, aiRng.fork('carrera'), arena, !!net || !!grid);
   race.hazards = obstacles.hazards;
   if (net) session.attach(race, karts);
   else arena.net = null;
   applySettings();
-  chase.reset();
+  for (const c of chases) c.reset();
 }
 
 function titleStatus(): string {
@@ -284,6 +316,9 @@ function showSettings(after: () => void): void {
 function showTitle(): void {
   mode = 'title';
   cup = null;
+  join?.close();
+  join = null;
+  leaveSplit();
   loop.fpsLimit = params.fps ?? 30;
   loadTrack(titleTrack());
   buildRace();
@@ -309,6 +344,7 @@ function showTitle(): void {
     titleStatus(),
     fullscreenSupported() ? toggleFullscreen : null,
     () => openOnline(),
+    touchOn ? null : openSplit,
   );
   hud.screenClass('title');
   podium.hide();
@@ -328,13 +364,14 @@ function cupOrder(): { char: Species; name: string }[] {
 }
 
 function showCupStandings(c: Cup): void {
-  const me = karts[0]?.char.id ?? null;
+  const me = localKarts().map((k) => k.char.id);
   if (c.done) {
     const top = c.standings().slice(0, 3).map((r) => CHARACTERS.find((x) => x.id === r.char)!);
     podium.show(top, true);
     podiumT = 0;
-    const mine = c.standings().find((r) => r.char === me);
-    if (mine) voice.say(mine.rank === 1 ? '¡Ganaste la copa!' : `¡Quedaste en el lugar ${mine.rank} de la copa!`);
+    const mine = c.standings().find((r) => me.includes(r.char));
+    if (mine && me.length > 1) voice.say(mine.rank === 1 ? `¡${mine.name} ganó la copa!` : `¡${mine.name} quedó en el lugar ${mine.rank} de la copa!`);
+    else if (mine) voice.say(mine.rank === 1 ? '¡Ganaste la copa!' : `¡Quedaste en el lugar ${mine.rank} de la copa!`);
   }
   if (session.active && session.isHost)
     hud.showCup(c, me, {
@@ -408,7 +445,7 @@ function beginRace(): void {
   loop.fpsLimit = params.fps ?? 60;
   dynRes.targetMs = 1000 / (loop.fpsLimit || 60);
   hud.setRaceVisible(true);
-  touch.show(touchOn);
+  touch.show(touchOn && !split);
   resultsShownAt = -1;
   race.start();
   scoredThisRace = false;
@@ -430,7 +467,7 @@ function pause(): void {
     hud.closeScreen();
     audio.music?.duck(false);
     mode = 'race';
-    touch.show(touchOn);
+    touch.show(touchOn && !split);
   };
   if (session.active) hud.showPause(resume, null, leaveOnline, () => showSettings(pause2), fullscreenSupported() ? toggleFullscreen : null, 'Salir de la sala');
   else hud.showPause(resume, startRace, showTitle, () => showSettings(pause2), fullscreenSupported() ? toggleFullscreen : null);
@@ -438,6 +475,75 @@ function pause(): void {
     mode = 'race';
     pause();
   }
+}
+
+// ---------------- Pantalla dividida (2 jugadores) ----------------
+
+/** Karts de este dispositivo, en orden (jugador 1, jugador 2). */
+function localKarts(): Kart[] {
+  return karts.filter((k) => k.localNo >= 0).sort((a, b) => a.localNo - b.localNo);
+}
+/** Número de jugador local que maneja el kart `i` (−1 si nadie de este dispositivo). */
+const localOf = (i: number): number => karts[i]?.localNo ?? -1;
+/** Vibración en el mando de ese jugador. */
+function rumbleFor(L: number, strong: number, weak: number, ms: number): void {
+  input.rumble(strong, weak, ms, split ? split.devs[L] : undefined);
+}
+
+function splitSummary(): string {
+  if (setup.cup) return `Copa Peluche · ${setup.laps} vueltas · rivales ${setup.cpu.label}`;
+  const t = trackEntry;
+  return `${t.name} · ${setup.laps} vueltas · rivales ${setup.cpu.label}`;
+}
+
+function openSplit(): void {
+  hud.closeScreen();
+  join = openSplitJoin({
+    saved: [
+      { charIndex: setup.charIndex, profile: settings.profile },
+      { charIndex: settings.p2.charIndex, profile: settings.p2.profile },
+    ],
+    summary: splitSummary(),
+    deviceName: (d) => input.deviceName(d),
+    onStart: (players) => {
+      join = null;
+      startSplit(players);
+    },
+    onBack: () => {
+      join = null;
+      showTitle();
+    },
+  });
+}
+
+/** Ayudas de un perfil para el jugador 1 (los ajustes generales) sin tocar la voz ni los rivales. */
+function setP1Profile(p: Profile): void {
+  if (settings.profile === p) return;
+  settings.profile = p;
+  Object.assign(settings, profileAssist(p));
+}
+
+function startSplit(players: [SplitPlayer, SplitPlayer]): void {
+  split = { devs: [players[0].dev, players[1].dev] };
+  setup.charIndex = players[0].charIndex;
+  setP1Profile(players[0].profile);
+  settings.p2 = { ...settings.p2, profile: players[1].profile, ...profileAssist(players[1].profile), charIndex: players[1].charIndex };
+  storeSetup();
+  hud.setPlayers(2);
+  // Cada vista es el doble de ancha que alta: campo de visión más cerrado.
+  chase.baseFov = chase2.baseFov = 52;
+  // En pantalla dividida la calidad baja un nivel (sombras y partículas).
+  applyQuality(LOWER[baseQuality]);
+  if (setup.cup) startCup();
+  else startRace();
+}
+
+function leaveSplit(): void {
+  if (!split) return;
+  split = null;
+  hud.setPlayers(1);
+  chase.baseFov = 68;
+  applyQuality(baseQuality);
 }
 
 // ---------------- En línea ----------------
@@ -484,7 +590,10 @@ function toTitleQuiet(): void {
   loop.fpsLimit = params.fps ?? 30;
   hud.setRaceVisible(false);
   touch.show(false);
-  if (!race || race.phase !== 'grid') buildRace();
+  if (split) {
+    leaveSplit();
+    buildRace();
+  } else if (!race || race.phase !== 'grid') buildRace();
   placeShowroomKart();
 }
 
@@ -560,39 +669,46 @@ bus.on('race:go', () => {
   voice.say('¡Ya!');
 });
 bus.on('kart:lap', ({ kart, lap }) => {
-  if (kart !== 0 || !race) return;
+  const L = localOf(kart);
+  if (L < 0 || !race) return;
   if (lap === race.laps) {
-    hud.flash('¡Última vuelta!', true, '#ffd23a');
+    hud.flash('¡Última vuelta!', true, '#ffd23a', L);
     audio.lap(true);
     voice.say('¡Última vuelta!');
     if (audio.music) audio.music.tempoMul = 1.12;
   } else if (lap > 1 && lap <= race.laps) {
-    hud.flash(`Vuelta ${lap}`, true);
+    hud.flash(`Vuelta ${lap}`, true, '#ffffff', L);
     audio.lap(false);
   }
 });
 bus.on('kart:finish', ({ kart, place }) => {
-  if (kart !== 0) return;
-  hud.flash(place === 1 ? '¡Ganaste!' : '¡Meta!', false, '#ffd23a');
+  const L = localOf(kart);
+  if (L < 0) return;
+  const k = karts[kart];
+  hud.flash(place === 1 ? '¡Ganaste!' : '¡Meta!', false, '#ffd23a', L);
   audio.finish(place);
-  voice.say(place === 1 ? '¡Ganaste!' : `¡Llegaste en el lugar ${place}!`);
-  audio.playMusic('none');
-  input.rumble(0.6, 0.6, 400);
+  if (split) voice.say(place === 1 ? `¡Ganó ${k.name}!` : `¡${k.name} llegó en el lugar ${place}!`);
+  else voice.say(place === 1 ? '¡Ganaste!' : `¡Llegaste en el lugar ${place}!`);
+  // La música se apaga cuando han llegado todos los jugadores de este dispositivo.
+  if (localKarts().every((x) => x.finished)) audio.playMusic('none');
+  rumbleFor(L, 0.6, 0.6, 400);
 });
 bus.on('kart:boost', ({ kart }) => {
-  if (kart !== 0) return;
+  const L = localOf(kart);
+  if (L < 0) return;
   audio.boost();
-  chase.shake(0.15);
-  input.rumble(0.2, 0.6, 250);
+  chases[L].shake(0.15);
+  rumbleFor(L, 0.2, 0.6, 250);
 });
 bus.on('kart:drift', ({ kart, level }) => {
-  if (kart === 0) audio.driftLevel(level);
+  if (localOf(kart) >= 0) audio.driftLevel(level);
 });
 bus.on('kart:bump', ({ kart, strength }) => {
-  if (kart !== 0) return;
+  const L = localOf(kart);
+  if (L < 0) return;
   audio.bump(strength);
-  chase.shake(Math.min(0.5, strength * 0.04));
-  input.rumble(Math.min(1, strength * 0.08), 0.3, 150);
+  chases[L].shake(Math.min(0.5, strength * 0.04));
+  rumbleFor(L, Math.min(1, strength * 0.08), 0.3, 150);
 });
 bus.on('kart:fall', ({ kart, x, z }) => {
   // Chapuzón en el arroyo: salpicadura donde cayó (el kart ya está en la otra orilla).
@@ -604,10 +720,11 @@ bus.on('kart:fall', ({ kart, x, z }) => {
   const v = volKart(kart);
   audio.pop(v);
   audio.land();
-  if (kart === 0) {
-    hud.toast('¡Al agua! ¡Más rápido la próxima!', '#bfe6ff');
-    input.rumble(0.6, 0.4, 300);
-    chase.reset();
+  const L = localOf(kart);
+  if (L >= 0) {
+    hud.toast('¡Al agua! ¡Más rápido la próxima!', '#bfe6ff', L);
+    rumbleFor(L, 0.6, 0.4, 300);
+    chases[L].reset();
   }
 });
 bus.on('kart:slip', ({ kart }) => {
@@ -617,14 +734,15 @@ bus.on('kart:slip', ({ kart }) => {
     const a = Math.random() * Math.PI * 2;
     dust.spawn(k.pos.x + Math.cos(a) * 1.4, k.pos.y + 0.4, k.pos.z + Math.sin(a) * 1.4, Math.cos(a) * 2, 2.5 + Math.random() * 2, Math.sin(a) * 2, 0.9, 0.7, 0.2, 0xe8f8ff, 0.8, 0.5, 1.2);
   }
-  if (kart === 0) {
+  const L = localOf(kart);
+  if (L >= 0) {
     audio.bubble(0.7);
-    hud.toast('¡Jabón!', '#bfe9ff');
-    input.rumble(0.3, 0.2, 200);
+    hud.toast('¡Jabón!', '#bfe9ff', L);
+    rumbleFor(L, 0.3, 0.2, 200);
   }
 });
 bus.on('kart:hop', ({ kart }) => {
-  if (kart === 0) audio.hop();
+  if (localOf(kart) >= 0) audio.hop();
 });
 bus.on('kart:land', ({ kart, strength }) => {
   const k = karts[kart];
@@ -633,29 +751,33 @@ bus.on('kart:land', ({ kart, strength }) => {
     const a = Math.random() * Math.PI * 2;
     dust.spawn(k.pos.x + Math.cos(a) * 1.2, k.pos.y + 0.2, k.pos.z + Math.sin(a) * 1.2, Math.cos(a) * 3, 1.5, Math.sin(a) * 3, 0.5, 0.6, 1.5, 0xf2e8d0, 0.5, 2, 2);
   }
-  if (kart === 0 && strength > 6) {
+  const L = localOf(kart);
+  if (L >= 0 && strength > 6) {
     audio.land();
-    chase.shake(0.25);
+    chases[L].shake(0.25);
   }
 });
 
-// Objetos y poderes: el sonido baja con la distancia al jugador.
-function volAt(x: number, z: number): number {
-  const p = karts[0];
-  if (!p) return 0;
-  return Math.max(0, 1 - Math.hypot(p.pos.x - x, p.pos.z - z) / 90);
+// Objetos y poderes: el sonido baja con la distancia al jugador (con dos, al más cercano).
+function volFrom(k: Kart, x: number, z: number): number {
+  return Math.max(0, 1 - Math.hypot(k.pos.x - x, k.pos.z - z) / 90);
 }
-const volKart = (i: number): number => (i === 0 ? 1 : karts[i] ? volAt(karts[i].pos.x, karts[i].pos.z) : 0);
+function volAt(x: number, z: number): number {
+  let v = 0;
+  for (const k of localKarts()) v = Math.max(v, volFrom(k, x, z));
+  return v;
+}
+const volKart = (i: number): number => (localOf(i) >= 0 ? 1 : karts[i] ? volAt(karts[i].pos.x, karts[i].pos.z) : 0);
 const POWER_SAY: Record<string, string> = {
   perro: '¡Guau guau!', esponja: '¡Burbuja!', raton: '¡Rayo!', zorro: '¡Fuego de zorro!', dino: '¡Pisotón!', robot: '¡Brazos telescópicos!',
 };
 
 bus.on('box:open', ({ kart }) => {
-  if (kart === 0) audio.box();
+  if (localOf(kart) >= 0) audio.box();
 });
 let rouletteTick = 0;
 bus.on('item:get', ({ kart }) => {
-  if (kart === 0) audio.itemGet();
+  if (localOf(kart) >= 0) audio.itemGet();
 });
 bus.on('item:use', ({ kart, item }) => {
   const v = volKart(kart);
@@ -663,15 +785,16 @@ bus.on('item:use', ({ kart, item }) => {
   else if (item === 'chicle') audio.gum(v);
 });
 bus.on('power:ready', ({ kart }) => {
-  if (kart === 0) audio.powerReady();
+  if (localOf(kart) >= 0) audio.powerReady();
 });
 bus.on('power:use', ({ kart, power }) => {
   const v = volKart(kart);
-  if (kart === 0) hud.flash(POWER_SAY[power], true, '#ffd23a');
+  const L = localOf(kart);
+  if (L >= 0) hud.flash(POWER_SAY[power], true, '#ffd23a', L);
   else if (v > 0.3) hud.toast(`${karts[kart].name}: ${karts[kart].char.power}`, '#ffe9a8');
   if (power === 'perro') {
     audio.bark(v);
-    if (kart === 0 || v > 0.6) chase.shake(0.2);
+    for (const k of localKarts()) if (k.index === kart || volFrom(k, karts[kart].pos.x, karts[kart].pos.z) > 0.6) chases[k.localNo].shake(0.2);
   } else if (power === 'esponja') audio.bubble(v);
   else if (power === 'zorro') audio.fire(v);
   else if (power === 'dino') audio.jump(v);
@@ -680,34 +803,37 @@ bus.on('power:use', ({ kart, power }) => {
 bus.on('fx:grab', ({ kart, caught }) => {
   const v = volKart(kart);
   audio.boing(v, caught);
-  if (kart === 0 && caught) chase.shake(0.25);
+  const L = localOf(kart);
+  if (L >= 0 && caught) chases[L].shake(0.25);
 });
 bus.on('fx:lightning', () => {
   audio.thunder();
   hud.screenFlash(0.8);
 });
 bus.on('fx:quake', ({ x, z }) => {
-  const v = volAt(x, z);
-  audio.quake(v);
-  chase.shake(0.7 * v);
-  input.rumble(0.8 * v, 0.4 * v, 450);
+  audio.quake(volAt(x, z));
+  for (const k of localKarts()) {
+    const v = volFrom(k, x, z);
+    chases[k.localNo].shake(0.7 * v);
+    rumbleFor(k.localNo, 0.8 * v, 0.4 * v, 450);
+  }
 });
 bus.on('fx:explode', ({ x, z, big }) => {
-  const v = volAt(x, z);
-  audio.explosion(v, big);
-  if (v > 0.6) chase.shake(big ? 0.45 : 0.2);
+  audio.explosion(volAt(x, z), big);
+  for (const k of localKarts()) if (volFrom(k, x, z) > 0.6) chases[k.localNo].shake(big ? 0.45 : 0.2);
 });
 bus.on('kart:hit', ({ kart, kind, by }) => {
   const v = volKart(kart);
   if (kind === 'stuck') audio.stuck(v);
   else if (kind === 'bubble') audio.pop(v);
   else if (kind !== 'shrink') audio.hit(v);
-  if (kart === 0) {
-    input.rumble(0.9, 0.5, 350);
-    chase.shake(0.35);
-    const who = by >= 0 && by !== 0 ? karts[by] : null;
+  const L = localOf(kart);
+  if (L >= 0) {
+    rumbleFor(L, 0.9, 0.5, 350);
+    chases[L].shake(0.35);
+    const who = by >= 0 && by !== kart ? karts[by] : null;
     const what = { spin: '¡Uy!', stuck: '¡Chicle!', bubble: '¡Atrapado!', shrink: '¡Pequeñito!', tumble: '¡Bum!' }[kind];
-    hud.toast(who ? `${what} ${who.name} te dio` : what, '#ffb0b0');
+    hud.toast(who ? `${what} ${who.name} te dio` : what, '#ffb0b0', L);
   }
 });
 
@@ -799,20 +925,26 @@ function benchFrame(intervalMs: number): void {
 
 function frame(dt: number): void {
   dynRes.sample(loop.lastIntervalMs, dt);
-  const ctl = input.read();
-  if (mode === 'race') touch.merge(ctl, dt, karts[0].power >= 1);
+  input.poll();
+  // Un control por jugador de este dispositivo: en pantalla dividida, cada uno con su teclado o mando.
+  const ctls: Controls[] = split ? split.devs.map((d) => input.readDevice(d)) : [input.read()];
+  const ctl = ctls[0];
+  if (mode === 'race' && !split) touch.merge(ctl, dt, karts[0].power >= 1);
   if (input.consumePause()) {
     if (mode === 'race') pause();
     else if (mode === 'paused' && !closeSettings) {
       hud.closeScreen();
       mode = 'race';
-      touch.show(touchOn);
+      touch.show(touchOn && !split);
     }
   }
-  const menuKeys = input.consumeMenu();
-  if (closeSettings) {
-    if (menuKeys.includes('back')) closeSettings();
-  } else if (hud.menuOpen) hud.menuInput(menuKeys);
+  if (join) join.input(input.consumeMenuEvents());
+  else {
+    const menuKeys = input.consumeMenu();
+    if (closeSettings) {
+      if (menuKeys.includes('back')) closeSettings();
+    } else if (hud.menuOpen) hud.menuInput(menuKeys);
+  }
 
   if (mode === 'title') {
     titleT += dt;
@@ -820,11 +952,11 @@ function frame(dt: number): void {
     const me = karts[0];
     me.heading += dt * 0.55;
     me.showoff = true;
-    race.update(dt, ctl, camera);
+    race.update(dt, ctls, camera);
     obstacles.update(titleT, []);
   } else if (mode === 'race' || mode === 'results' || (mode === 'paused' && session.active)) {
     // En línea la carrera no se detiene en la pausa (los demás siguen corriendo).
-    const c = mode === 'paused' ? NO_CTL : ctl;
+    const c = mode === 'paused' ? ctls.map(() => NO_CTL) : ctls;
     for (let s = 0; s < params.speed; s++) {
       race.update(dt, c, camera);
       obstacles.update(race.time, karts);
@@ -869,37 +1001,82 @@ function frame(dt: number): void {
     podiumCam(camera, podium.pos, podium.facing, podiumT);
     frameShowroom(0.19, 0.24);
   }
-  else if (mode !== 'paused') chase.update(dt, p, mode === 'race' && ctl.look);
+  else if (mode !== 'paused') {
+    chase.update(dt, p, mode === 'race' && ctl.look);
+    if (split && karts[1]) chase2.update(dt, karts[1], mode === 'race' && !!ctls[1]?.look);
+  }
   if (mode !== 'title' && !(mode === 'results' && podium.visible) && camera.view?.enabled) camera.clearViewOffset();
+  // Pantalla dividida: dos vistas (arriba el jugador 1, abajo el 2) mientras se corre; el podio, a pantalla completa.
+  const splitView = !!split && !!karts[1] && params.cam !== 'top' && params.cam !== 'free' && (mode === 'race' || mode === 'paused' || (mode === 'results' && !podium.visible));
+  const W = app.clientWidth;
+  const H = app.clientHeight;
+  const topH = Math.floor(H / 2);
+  if (splitView) {
+    setAspect(camera, W / topH);
+    setAspect(camera2, W / (H - topH));
+  } else setAspect(camera, W / H);
   if (podium.visible) followSun(stage, podium.pos.x, podium.pos.y, podium.pos.z);
   else followSun(stage, p.pos.x, p.pos.y, p.pos.z);
   podium.update(dt);
 
   if (mode !== 'paused') {
     trackVis.update(dt);
-    sparks.update(dt, camera, renderer.domElement.height);
-    dust.update(dt, camera, renderer.domElement.height);
+    const vh = renderer.domElement.height * (splitView ? 0.5 : 1);
+    sparks.update(dt, camera, vh);
+    dust.update(dt, camera, vh);
   }
   if (mode === 'race' || mode === 'results') {
     hud.update(race);
-    if (p.rouletteT > 0 && (rouletteTick += dt) > 0.08) {
+    if (localKarts().some((k) => k.rouletteT > 0) && (rouletteTick += dt) > 0.08) {
       rouletteTick = 0;
       audio.roulette();
     }
   }
   const racing = mode === 'race' || mode === 'results';
-  audio.setEngine(Math.min(1.3, Math.abs(p.speed) / TUNING.maxSpeed), racing ? 1 : 0, p.boostT > 0, p.driftLevel, p.drift !== 0 && p.grounded, racing && !p.finished);
+  // Motor: el del jugador que va más rápido (con uno, el suyo).
+  const e = split ? localKarts().reduce((a, b) => (Math.abs(b.speed) > Math.abs(a.speed) ? b : a), p) : p;
+  audio.setEngine(Math.min(1.3, Math.abs(e.speed) / TUNING.maxSpeed), racing ? 1 : 0, e.boostT > 0, e.driftLevel, e.drift !== 0 && e.grounded, racing && !localKarts().every((k) => k.finished));
 
   gpu.begin();
-  renderer.render(scene, camera);
+  if (splitView) {
+    renderer.setScissorTest(true);
+    const views: [THREE.PerspectiveCamera, Kart, number, number][] = [
+      [camera, karts[0], H - topH, topH],
+      [camera2, karts[1], 0, H - topH],
+    ];
+    for (const [cam, k, y, h] of views) {
+      // La sombra sigue a cada kart en su vista.
+      followSun(stage, k.pos.x, k.pos.y, k.pos.z);
+      renderer.setViewport(0, y, W, h);
+      renderer.setScissor(0, y, W, h);
+      renderer.render(scene, cam);
+    }
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, W, H);
+  } else renderer.render(scene, camera);
   gpu.end();
   benchFrame(loop.lastIntervalMs);
+}
+
+function setAspect(cam: THREE.PerspectiveCamera, a: number): void {
+  if (Math.abs(cam.aspect - a) < 1e-4) return;
+  cam.aspect = a;
+  cam.updateProjectionMatrix();
 }
 
 // ---------------- Arranque ----------------
 
 showTitle();
-if (params.autostart) {
+if (params.split && !touchOn) {
+  // Pruebas: `?split&autostart` empieza con teclado (jugador 1) y el mando 0 (jugador 2); `?split` abre la pantalla de unirse.
+  if (params.autostart) {
+    const c2 = settings.p2.charIndex === setup.charIndex ? (setup.charIndex + 1) % CHARACTERS.length : settings.p2.charIndex;
+    startSplit([
+      { dev: 'kbd', charIndex: setup.charIndex, profile: settings.profile },
+      { dev: 'pad0', charIndex: c2, profile: settings.p2.profile },
+    ]);
+  } else openSplit();
+} else if (params.autostart) {
   if (setup.cup) startCup();
   else startRace();
 }
@@ -941,6 +1118,14 @@ window.__game = {
   get trackId() {
     return trackEntry.id;
   },
+  get split() {
+    return split;
+  },
+  /** Para las pruebas: empieza la pantalla dividida con esos dispositivos. */
+  startSplit,
+  chase2,
+  camera2,
+  input,
   loadTrack,
   camera,
   renderer,

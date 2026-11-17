@@ -12,6 +12,8 @@ export class ChaseCam {
   private shakeT = 0;
   private shakeAmp = 0;
   private fov = 68;
+  /** Campo de visión vertical en reposo (más cerrado en pantalla dividida, donde cada vista es muy ancha). */
+  baseFov = 68;
   private readonly desired = new THREE.Vector3();
   private readonly lookAt = new THREE.Vector3();
 
@@ -80,7 +82,7 @@ export class ChaseCam {
       this.cam.position.y += (Math.random() - 0.5) * a;
     } else this.shakeAmp = 0;
     this.cam.lookAt(this.look);
-    const targetFov = 68 + Math.min(1, sp01) * 8 + (k.boostT > 0 ? 7 : 0);
+    const targetFov = this.baseFov + (Math.min(1, sp01) * 8 + (k.boostT > 0 ? 7 : 0)) * (this.baseFov / 68);
     this.fov += (targetFov - this.fov) * Math.min(1, dt * 4);
     if (Math.abs(this.cam.fov - this.fov) > 0.01) {
       this.cam.fov = this.fov;
