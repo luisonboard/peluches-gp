@@ -1,6 +1,6 @@
 // Botones táctiles para teléfonos y tablets (multitáctil con Pointer Events).
-// Modo "botones": ◀ ▶ a la izquierda. Modo "giroscopio": botón para centrar el volante y un indicador.
-// Acelerar y frenar van juntos a la derecha; objeto y poder, juntos arriba al lado del casillero del objeto.
+// Izquierda: ◀ ▶ (o, con giroscopio, centrar y un indicador), mirar atrás y pausa. Derecha: acelerar y frenar
+// juntos abajo, derrapar al lado, y objeto y poder juntos encima.
 // Con el perfil Peque, objeto y poder comparten un solo botón grande.
 import type { Controls } from './input';
 import type { Gyro } from './gyro';
@@ -23,7 +23,6 @@ const CSS = `
   font: 900 26px/1.3 ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif; padding: 24px; }
 #pgp-rotate .big { font-size: 80px; display: block; animation: pgp-rot 1.6s ease-in-out infinite; }
 @keyframes pgp-rot { 50% { transform: rotate(-90deg) } }
-body.pgp-touch-on #hud-item { transform: translateX(calc(-100% - 10px)); }
 body.pgp-touch-on #hud-pos { bottom: auto; top: calc(max(14px, env(safe-area-inset-top)) + 84px); font-size: clamp(44px, 9vh, 72px); }
 `;
 
@@ -97,22 +96,24 @@ export class TouchControls {
       mk('left', '<span class="ic">◀</span>', 96, { left: L, bottom: B });
       mk('right', '<span class="ic">▶</span>', 96, { left: `calc(${L} + 110px)`, bottom: B });
     }
-    // Derecha abajo: Frenar y Acelerar juntos; Derrapar encima de ellos.
+    // Derecha, abajo: Acelerar (en la esquina) y Frenar juntos, y Derrapar a su lado. Encima: Objeto y Poder juntos.
+    // Con aceleración automática no hay botón de acelerar y Frenar pasa a la esquina.
     const gas = !s.autoAccel;
     if (gas) mk('gas', '<span><span class="ic">▲</span>Acelerar</span>', 100, { right: R, bottom: B });
-    mk('brake', '<span><span class="ic">▼</span>Frenar</span>', 80, { right: gas ? `calc(${R} + 112px)` : R, bottom: B });
-    mk('drift', '<span><span class="ic">🌀</span>Derrapar</span>', 76, { right: gas ? `calc(${R} + 58px)` : `calc(${R} + 2px)`, bottom: `calc(${B} + 98px)` });
-    // Arriba, junto al casillero del objeto: Objeto y Poder (o un solo ¡Usar! con el perfil Peque).
-    const T = 'max(10px, env(safe-area-inset-top))';
+    const brakeR = gas ? 112 : 0;
+    mk('brake', '<span><span class="ic">▼</span>Frenar</span>', 84, { right: `calc(${R} + ${brakeR}px)`, bottom: B });
+    mk('drift', '<span><span class="ic">🌀</span>Derrapar</span>', 88, { right: `calc(${R} + ${brakeR + 96}px)`, bottom: B });
+    const up = `calc(${B} + ${gas ? 116 : 100}px)`;
     if (peque) {
-      mk('use', '<span><span class="ic">⭐</span>¡Usar!</span>', 80, { left: 'calc(50% + 10px)', top: T });
+      mk('use', '<span><span class="ic">⭐</span>¡Usar!</span>', 96, { right: `calc(${R} + ${gas ? 50 : 0}px)`, bottom: up });
     } else {
-      mk('item', '<span><span class="ic">🎁</span>Objeto</span>', 74, { left: 'calc(50% + 10px)', top: T });
-      mk('power', '<span><span class="ic">⚡</span>Poder</span>', 74, { left: 'calc(50% + 94px)', top: T });
+      mk('power', '<span><span class="ic">⚡</span>Poder</span>', 80, { right: `calc(${R} + ${gas ? 10 : 2}px)`, bottom: up });
+      mk('item', '<span><span class="ic">🎁</span>Objeto</span>', 80, { right: `calc(${R} + ${gas ? 100 : 92}px)`, bottom: up });
     }
-    const topR = 'calc(max(12px, env(safe-area-inset-top)) + clamp(118px, 26vh, 200px))';
-    mk('pause', '<span class="ic" style="font-size:22px">❚❚</span>', 52, { right: `calc(${R} + 4px)`, top: topR });
-    mk('look', '<span class="ic" style="font-size:24px">👀</span>', 52, { right: `calc(${R} + 66px)`, top: topR });
+    // Izquierda, encima del volante: mirar atrás y pausa.
+    const upL = `calc(${B} + ${s.steerMode === 'giro' ? 96 : 112}px)`;
+    mk('look', '<span class="ic" style="font-size:24px">👀</span>', 56, { left: L, bottom: upL });
+    mk('pause', '<span class="ic" style="font-size:22px">❚❚</span>', 56, { left: `calc(${L} + 68px)`, bottom: upL });
   }
 
   show(v: boolean): void {

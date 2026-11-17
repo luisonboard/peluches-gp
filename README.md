@@ -40,8 +40,9 @@ dirección: https://peluches-gp.luisonboard.workers.dev
 | Mirar atrás (mantener) | C | − o R3 |
 | Pantalla completa | F | — |
 
-En el teléfono aparecen botones táctiles (en horizontal): ◀ ▶ o volante por giroscopio, Frenar, Derrapar, Objeto/Poder y 👀 (mirar atrás)
-(en el perfil Peque, un solo botón "¡Usar!"). Ajustes (⚙ en el título o en la pausa): perfil, ayuda de manejo, voz,
+En el teléfono aparecen botones táctiles (en horizontal). Izquierda: ◀ ▶ (o volante por giroscopio), 👀 (mirar atrás) y
+pausa. Derecha: Acelerar y Frenar juntos abajo (sin Acelerar si acelera solo), Derrapar al lado, y Objeto y Poder
+juntos encima (en el perfil Peque, un solo botón "¡Usar!"). Ajustes (⚙ en el título o en la pausa): perfil, ayuda de manejo, voz,
 volante, nombres de los peluches y prueba del mando.
 | Menús | Flechas + Enter | Palanca/cruceta + B |
 
