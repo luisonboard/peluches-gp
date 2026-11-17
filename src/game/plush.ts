@@ -396,6 +396,11 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
   const earBase = ears.map((e) => e.rotation.z);
   const tailBase = tails.map((t) => t.rotation.y);
   const armBase = arms.map((a) => a.rotation.x);
+  // Al celebrar, los brazos suben y se abren hacia afuera para no atravesar la cabeza.
+  // Orden ZYX: primero se levanta el brazo (X) y luego se abre hacia el lado (Z).
+  // El robot tiene hombros anchos y codos, y ya celebra sin chocar.
+  const spread = c.id === 'robot' ? 0 : 1;
+  if (spread) for (const a of arms) a.rotation.order = 'ZYX';
   return {
     group,
     update(p: PlushPose) {
@@ -413,7 +418,8 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
       });
       arms.forEach((a, i) => {
         a.rotation.x = armBase[i] - p.cheer * 2.4 * (0.8 + 0.2 * Math.sin(p.t * 10 + i * 3));
-        a.rotation.z = p.steerS * 0.12 * (i % 2 ? 1 : -1);
+        const side = i % 2 ? 1 : -1;
+        a.rotation.z = p.steerS * 0.12 * side - side * spread * p.cheer * (1.0 + 0.12 * Math.sin(p.t * 10 + i * 3));
       });
       group.position.y = Math.abs(Math.sin(p.t * 14)) * 0.03 * sp + p.cheer * Math.abs(Math.sin(p.t * 8)) * 0.15;
     },
