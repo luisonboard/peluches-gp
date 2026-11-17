@@ -16,6 +16,8 @@ export interface Textures {
   blob: THREE.Texture;
   banner: THREE.Texture;
   pages: THREE.Texture;
+  /** Rizo de toalla claro (se tiñe con color de vértice): faldón de la Bañera. */
+  towel: THREE.Texture;
   letter(ch: string, bg: string): THREE.Texture;
 }
 
@@ -338,7 +340,22 @@ export function makeTextures(rng: Rng, aniso: number): Textures {
     return t;
   };
 
-  const all = { wood, road, curb, felt, blanket, wall, cardboard, checker, pad, ball, blob, banner, pages };
+  // Va al final y con su propio generador: así no cambia ninguna textura anterior.
+  const towel = (() => {
+    const r = rng.fork('toalla');
+    const [c, g] = canvas(256, 256);
+    g.fillStyle = '#f4f1ea';
+    g.fillRect(0, 0, 256, 256);
+    speckle(g, r, 256, 256, 9000, 'rgba(255,255,255,0.5)', 'rgba(60,40,30,0.12)', 2);
+    // Franjas tejidas de la toalla.
+    for (const y of [40, 56, 190, 206]) {
+      g.fillStyle = 'rgba(80,60,50,0.16)';
+      g.fillRect(0, y, 256, 8);
+    }
+    return toTex(c, aniso);
+  })();
+
+  const all = { wood, road, curb, felt, blanket, wall, cardboard, checker, pad, ball, blob, banner, pages, towel };
   // Compartidas por todas las pistas: no se liberan al cambiar de pista (ver render/dispose.ts).
   for (const t of Object.values(all)) t.userData.shared = true;
   return { ...all, letter };

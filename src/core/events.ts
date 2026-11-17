@@ -11,6 +11,8 @@ export interface EventMap {
   'kart:drift': { kart: number; level: number };
   'kart:hop': { kart: number };
   'kart:land': { kart: number; strength: number };
+  /** Pisó un charco de jabón. */
+  'kart:slip': { kart: number };
   /** Golpe recibido. `by` = kart que lo causó (−1 si nadie). */
   'kart:hit': { kart: number; kind: HitKind; by: number };
   'box:open': { kart: number; x: number; y: number; z: number };

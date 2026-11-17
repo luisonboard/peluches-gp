@@ -3,6 +3,8 @@
 import type { Rng } from '../core/rng';
 import type { Kart, KartCtl } from './kart';
 import { wrapAngle } from './kart';
+import type { Track } from './track';
+import type { Hazard } from './obstacles';
 
 /** Lo que la IA necesita saber de la carrera para decidir objetos y poderes. */
 export interface AIContext {
@@ -10,6 +12,33 @@ export interface AIContext {
   /** 0 = fácil, 1 = normal, 2 = difícil. */
   level: number;
   gums: { x: number; z: number }[];
+  /** Obstáculos que se mueven (patitos). */
+  hazards: readonly Hazard[];
+}
+
+/**
+ * Desplaza la posición lateral deseada (`lat`, en metros) para pasar junto a los obstáculos que habrá delante
+ * cuando el kart llegue (su vaivén es predecible). `margin`: holgura extra en metros.
+ */
+export function dodgeHazards(tr: Track, k: Kart, lat: number, hazards: readonly Hazard[], margin: number): number {
+  const N = tr.N;
+  const sp = Math.max(8, Math.abs(k.speed));
+  for (const h of hazards) {
+    let d = h.i - k.idx;
+    if (d < 0) d += N;
+    if (d < 3 || d > 45) continue;
+    const t = (d * tr.step) / sp;
+    const hl = Math.max(-h.range, Math.min(h.range, h.lat + h.vLat * t));
+    const gap = h.r + 1.2 + margin;
+    if (Math.abs(lat - hl) >= gap) continue;
+    const hw = tr.samples[h.i].hw - 1.5;
+    // Por el lado que queda libre: el más cercano si cabe, si no el otro.
+    const side = lat >= hl ? 1 : -1;
+    const a = hl + side * gap;
+    const b = hl - side * gap;
+    lat = Math.abs(a) <= hw ? a : Math.abs(b) <= hw ? b : lat;
+  }
+  return lat;
 }
 
 export class AIDriver {
@@ -44,8 +73,10 @@ export class AIDriver {
     const cAhead = S[(k.idx + Math.round(look * 1.6) + 6) % N].curv;
     const inside = Math.sign(cAhead) * Math.min(0.55, Math.abs(cAhead) * 18);
     const latN = Math.max(-0.7, Math.min(0.7, this.offset + inside));
-    const tx = s.x + s.nx * latN * s.hw;
-    const tz = s.z + s.nz * latN * s.hw;
+    let latM = latN * s.hw;
+    if (ctx?.hazards.length) latM = dodgeHazards(tr, k, latM, ctx.hazards, 0.8);
+    const tx = s.x + s.nx * latM;
+    const tz = s.z + s.nz * latM;
     const want = Math.atan2(tx - k.pos.x, tz - k.pos.z);
     const diff = wrapAngle(want - k.heading);
     const steer = Math.max(-1, Math.min(1, -diff * 2.6));

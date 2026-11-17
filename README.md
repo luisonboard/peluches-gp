@@ -66,7 +66,7 @@ volante, nombres de los peluches y prueba del mando.
 | `?cam=free` | Cámara quieta, para moverla desde DevTools (`__game.camera`) |
 | `?seed=texto` | Semilla de lo procedural |
 | `?perfil=peque\|normal` | Aplica un perfil al cargar |
-| `?track=cuarto` | Pista al cargar (por ahora solo `cuarto`; las que no están listas se ignoran) |
+| `?track=cuarto\|bano` | Pista al cargar (las que no están listas se ignoran) |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
 | `?noaudio` | Sin audio |
@@ -197,6 +197,27 @@ piezas animadas). 10 cambios de pista seguidos y 5 carreras nuevas: geometrías 
 título, 134/63 en carrera). Carrera completa en automático sin errores. Sala por el relevo con dos pestañas: el
 invitado ve la pista elegida y la carrera corre en los dos. Build de 813 KB. `?bench` en Medio: 60 fps, 2,8 ms de
 GPU, 129 k triángulos.
+
+**Hito 8 — Bañera Burbujeante** (terminado, fase 2):
+
+- Pista `bano` (`src/world/bathTrack.ts`, ≈ 1090 m): suelo de baldosas, alfombra de baño (franja rosa), subida
+  por una toalla doblada, tramo estrecho (6,5 m de medio ancho) por el borde de la bañera a 10 m de altura,
+  tobogán de esponja con bajada suave y un salto corto al final.
+- Escenario (`src/world/bath.ts`): baldosas en `<canvas>`, bañera con agua, espuma, patito flotando, grifo y
+  patas doradas, ventana, burbujas que suben, y champús, papel higiénico, jabón, vaso con cepillos y toallas
+  enrolladas gigantes.
+- Patitos de goma (`src/game/obstacles.ts`): cruzan la pista de lado a lado según el tiempo de carrera (igual en
+  todos los dispositivos sin enviar nada). Empujan y frenan, sin trompo. La IA y la dirección asistida los esquivan
+  prediciendo dónde estarán.
+- Charcos de jabón (`slicks` en la pista): 0,7 s con un 25 % del agarre y menos giro, burbujas, sonido y "¡Jabón!".
+- Cada pista define los colores de la franja, barreras, polvo y faldón por superficie (`TrackLook`).
+
+Comprobado: 10 carreras con `?autoplay&speed=8&cpu=normal&track=bano`: las 10 terminan con los 6 karts, nadie
+parado más de 2 s, vueltas del jugador automático de 31–39 s (el mismo piloto da 26–31 s en el Cuarto),
+≈ 22 choques con patitos y ≈ 24 charcos por carrera (entre los 6 karts). Perfil Peque sin tocar nada: 3 vueltas
+de ≈ 33 s, 0 choques contra barreras, 0 % fuera de la pista. `?bench` en Medio: 60 fps, 2,9 ms de GPU, 161 k
+triángulos (con la pasada de sombras); en Bajo (el de los teléfonos): 60 fps, 1,7 ms, 66 k. Cambiar 10 veces
+entre Cuarto y Bañera: memoria estable.
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

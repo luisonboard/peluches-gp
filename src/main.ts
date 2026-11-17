@@ -10,7 +10,8 @@ import { createStage, followSun, applyLook } from './render/scene';
 import { disposeTree } from './render/dispose';
 import { makeTextures } from './world/textures';
 import { buildTrack, type TrackVisual } from './world/trackMesh';
-import { readyTrack, type ReadyTrack } from './world/tracks';
+import { readyTrack, dustColor, type ReadyTrack } from './world/tracks';
+import { Obstacles } from './game/obstacles';
 import { Track } from './game/track';
 import { CHARACTERS } from './game/characters';
 import { KartModel } from './game/kartModel';
@@ -55,6 +56,7 @@ let trackEntry!: ReadyTrack;
 let track!: Track;
 let trackVis!: TrackVisual;
 let scenery!: THREE.Group;
+let obstacles!: Obstacles;
 
 function mountTrack(id: string): void {
   trackEntry = readyTrack(id);
@@ -63,7 +65,8 @@ function mountTrack(id: string): void {
   trackVis = buildTrack(track, tex, quality, trackEntry.look);
   // `fork` no avanza el generador: la misma pista sale con el mismo decorado cada vez.
   scenery = trackEntry.scenery(track, tex, quality, rng.fork(trackEntry.seed));
-  scene.add(trackVis.group, scenery);
+  obstacles = new Obstacles(track, quality.shadowMap > 0);
+  scene.add(trackVis.group, scenery, obstacles.group);
 }
 mountTrack(params.track ?? settings.trackId);
 
@@ -99,6 +102,7 @@ function loadTrack(id: string, force = false): boolean {
   karts = [];
   disposeTree(trackVis.group);
   disposeTree(scenery);
+  disposeTree(obstacles.group);
   mountTrack(id);
   arena.setTrack(track);
   placePodium();
@@ -230,6 +234,7 @@ function buildRace(net?: RosterEntry[]): void {
   }
   const ais = karts.map((_, i) => new AIDriver(aiRng.fork(`p${i}`), i === 0 ? 0.8 : setup.cpu.driftSkill));
   race = new Race(karts, ais, setup.laps, setup.cpu, net ? false : params.autoplay, aiRng.fork('carrera'), arena, !!net);
+  race.hazards = obstacles.hazards;
   if (net) session.attach(race, karts);
   else arena.net = null;
   applySettings();
@@ -496,6 +501,19 @@ bus.on('kart:bump', ({ kart, strength }) => {
   chase.shake(Math.min(0.5, strength * 0.04));
   input.rumble(Math.min(1, strength * 0.08), 0.3, 150);
 });
+bus.on('kart:slip', ({ kart }) => {
+  const k = karts[kart];
+  if (!k) return;
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * Math.PI * 2;
+    dust.spawn(k.pos.x + Math.cos(a) * 1.4, k.pos.y + 0.4, k.pos.z + Math.sin(a) * 1.4, Math.cos(a) * 2, 2.5 + Math.random() * 2, Math.sin(a) * 2, 0.9, 0.7, 0.2, 0xe8f8ff, 0.8, 0.5, 1.2);
+  }
+  if (kart === 0) {
+    audio.bubble(0.7);
+    hud.toast('¡Jabón!', '#bfe9ff');
+    input.rumble(0.3, 0.2, 200);
+  }
+});
 bus.on('kart:hop', ({ kart }) => {
   if (kart === 0) audio.hop();
 });
@@ -626,7 +644,7 @@ function kartFx(k: Kart, dt: number): void {
   }
   if (k.offroad && k.grounded && Math.abs(k.speed) > 6) {
     if (Math.random() < 14 * q * dt * (Math.abs(k.speed) / 15)) {
-      const col = k.surface === 'bed' ? 0xf3ea9c : k.surface === 'ramp' ? 0xd8b484 : 0x9fcf8a;
+      const col = dustColor(trackEntry.look, k.surface);
       dust.spawn(k.pos.x - fx * 1.2, k.pos.y + 0.3, k.pos.z - fz * 1.2, -fx * 2 + (Math.random() - 0.5) * 2, 1.2, -fz * 2 + (Math.random() - 0.5) * 2, 0.6, 0.6, 1.4, col, 0.4, 1, 1.5);
     }
   }
@@ -694,10 +712,14 @@ function frame(dt: number): void {
     me.heading += dt * 0.55;
     me.showoff = true;
     race.update(dt, ctl, camera);
+    obstacles.update(titleT, []);
   } else if (mode === 'race' || mode === 'results' || (mode === 'paused' && session.active)) {
     // En línea la carrera no se detiene en la pausa (los demás siguen corriendo).
     const c = mode === 'paused' ? NO_CTL : ctl;
-    for (let s = 0; s < params.speed; s++) race.update(dt, c, camera);
+    for (let s = 0; s < params.speed; s++) {
+      race.update(dt, c, camera);
+      obstacles.update(race.time, karts);
+    }
     if (session.active) session.tick(dt);
     for (const k of karts) kartFx(k, dt);
     if (race.phase === 'done') {
@@ -787,6 +809,9 @@ window.__game = {
   },
   get track() {
     return track;
+  },
+  get obstacles() {
+    return obstacles;
   },
   get trackId() {
     return trackEntry.id;

@@ -2,7 +2,8 @@
 // Las consultas de posición usan una ventana alrededor del último índice conocido (barato y sin saltos entre tramos).
 import * as THREE from 'three';
 
-export type Surface = 'floor' | 'ramp' | 'bed';
+/** Superficie de cada tramo: solo cambia los colores y el polvo (la física es la misma). */
+export type Surface = 'floor' | 'ramp' | 'bed' | 'mat' | 'towel' | 'rim' | 'sponge';
 
 export interface CtrlPt {
   x: number;
@@ -35,8 +36,25 @@ export interface TrackDef {
   pads: PadDef[];
   /** Puntos de control donde van las cajas regalo (hito 2). */
   itemRows: { seg: number; f: number }[];
+  /** Charcos de jabón: menos agarre durante un momento (sin trompo). */
+  slicks?: PadDef[];
+  /** Obstáculos que cruzan la pista de lado a lado (patitos de goma). */
+  movers?: MoverDef[];
   /** Superficie según la altura, para los puntos sin `surf`. Sin ella: suelo. */
   surfaceByHeight?: (y: number) => Surface;
+}
+
+export interface MoverDef {
+  seg: number;
+  f: number;
+  /** Fracción del medio ancho que recorre a cada lado (0..1). */
+  amp: number;
+  /** Segundos de un ida y vuelta. */
+  period: number;
+  /** Fase inicial (0..1). */
+  phase: number;
+  /** Radio de choque en metros. */
+  r: number;
 }
 
 export interface Sample {
@@ -90,6 +108,7 @@ export class Track {
   readonly step: number;
   readonly shoulder: number;
   readonly pads: Pad[];
+  readonly slicks: Pad[];
   readonly bounds = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
 
   constructor(readonly def: TrackDef) {
@@ -142,6 +161,7 @@ export class Track {
       S[i].curv = ((j.tx - S[i].tx) * S[i].nx + (j.tz - S[i].tz) * S[i].nz) / (K * this.step);
     }
     this.pads = def.pads.map((p) => ({ i: this.indexAtSeg(p.seg, p.f), lat: p.lat, len: 7, hw: 2.3 }));
+    this.slicks = (def.slicks ?? []).map((p) => ({ i: this.indexAtSeg(p.seg, p.f), lat: p.lat, len: 9, hw: 3.2 }));
   }
 
   /** Índice de muestra donde la curva pasa por el punto de control `seg` + fracción `f`. */

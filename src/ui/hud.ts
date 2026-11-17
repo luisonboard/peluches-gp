@@ -401,7 +401,7 @@ export class Hud {
     wrap.style.width = 'min(760px, 100%)';
     const logo = el('div', 'pgp-logo');
     logo.innerHTML = [...'Peluches GP'].map((c) => `<span>${c === ' ' ? '&nbsp;' : c}</span>`).join('');
-    const sub = el('div', 'pgp-sub', 'Carreras en el cuarto de juegos');
+    const sub = el('div', 'pgp-sub', 'Carreras de peluches por toda la casa');
     const card = el('div', 'pgp-card');
     wrap.append(logo, sub, card);
 

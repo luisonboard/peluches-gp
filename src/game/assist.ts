@@ -3,6 +3,8 @@
 // Si el niño gira, manda él salvo cuando va a chocar.
 import type { Kart, KartCtl } from './kart';
 import { wrapAngle } from './kart';
+import type { Hazard } from './obstacles';
+import { dodgeHazards } from './ai';
 
 export interface AssistOpts {
   autoAccel: boolean;
@@ -14,7 +16,7 @@ const smoothstep = (a: number, b: number, x: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-export function applyAssist(k: Kart, c: KartCtl, o: AssistOpts, out: KartCtl): KartCtl {
+export function applyAssist(k: Kart, c: KartCtl, o: AssistOpts, out: KartCtl, hazards: readonly Hazard[] = []): KartCtl {
   Object.assign(out, c);
   if (o.autoAccel && c.brake < 0.1) out.throttle = Math.max(c.throttle, 1);
   if (!o.smartSteer) return out;
@@ -26,7 +28,10 @@ export function applyAssist(k: Kart, c: KartCtl, o: AssistOpts, out: KartCtl): K
   const s = S[(k.idx + look) % N];
   // Mantiene el carril del niño, pero dentro de una zona segura.
   const safe = s.hw - 1.8;
-  const lat = Math.max(-safe, Math.min(safe, k.lat));
+  // Si el niño no gira, también rodea los patitos.
+  const idle = Math.abs(c.steer) < 0.12;
+  let lat = Math.max(-safe, Math.min(safe, k.lat));
+  if (idle && hazards.length) lat = dodgeHazards(tr, k, lat, hazards, 0.5);
   const tx = s.x + s.nx * lat;
   const tz = s.z + s.nz * lat;
   const diff = wrapAngle(Math.atan2(tx - k.pos.x, tz - k.pos.z) - k.heading);
@@ -37,7 +42,6 @@ export function applyAssist(k: Kart, c: KartCtl, o: AssistOpts, out: KartCtl): K
   const pred = Math.abs(k.lat + (latV * 0.5 + latH * 0.5) * 0.7);
   const edge = here.hw + 0.6;
   const danger = smoothstep(edge - 4.5, edge + 0.5, pred);
-  const idle = Math.abs(c.steer) < 0.12;
   const w = idle ? 1 : Math.min(0.95, danger);
   out.steer = c.steer + (guide - c.steer) * w;
   return out;

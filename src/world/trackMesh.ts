@@ -74,16 +74,31 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
 
   // Franja lateral, con el color de cada superficie (en el cuarto: alfombra verde, cartón en la rampa, fieltro en la cama).
   const feltMat = new THREE.MeshStandardMaterial({ map: tex.felt, roughness: 1, vertexColors: true });
-  const shoulderCols = new Map(Object.entries(look.shoulder).map(([k, v]) => [k, new THREE.Color(v)]));
-  const shoulderColor = (s: Sample): THREE.Color => shoulderCols.get(s.surface)!;
+  const shoulderCols = new Map<string, THREE.Color>();
+  const shoulderColor = (s: Sample): THREE.Color => {
+    let c = shoulderCols.get(s.surface);
+    if (!c) shoulderCols.set(s.surface, (c = new THREE.Color(look.shoulder[s.surface] ?? look.shoulder.floor)));
+    return c;
+  };
   g.add(ribbon((s) => -(s.hw + sh + LIP), (s) => -s.hw - CURB, 0.03, 6, feltMat, shoulderColor));
   g.add(ribbon((s) => s.hw + CURB, (s) => s.hw + sh + LIP, 0.03, 6, feltMat, shoulderColor));
 
-  // Faldón de cartón bajo las partes elevadas (rampas y tramo sobre la cama).
-  const skirtMat = new THREE.MeshStandardMaterial({ map: tex.cardboard, roughness: 0.95, side: THREE.DoubleSide });
+  // Faldón bajo las partes elevadas (en el cuarto, cartón bajo las rampas y la cama), teñido por superficie.
+  const skirtTint = look.skirt?.tint;
+  const skirtMat = new THREE.MeshStandardMaterial({ map: tex[look.skirt?.tex ?? 'cardboard'], roughness: 0.95, side: THREE.DoubleSide, vertexColors: !!skirtTint });
+  const white = new THREE.Color(0xffffff);
+  const tintCols = new Map<string, THREE.Color>();
+  const tintOf = (s: Sample): THREE.Color => {
+    const v = skirtTint?.[s.surface];
+    if (v === undefined) return white;
+    let c = tintCols.get(s.surface);
+    if (!c) tintCols.set(s.surface, (c = new THREE.Color(v)));
+    return c;
+  };
   for (const side of [-1, 1]) {
     const pos = new Float32Array((N + 1) * 6);
     const uv = new Float32Array((N + 1) * 4);
+    const col = skirtTint ? new Float32Array((N + 1) * 6) : null;
     for (let k = 0; k <= N; k++) {
       const s = S[k % N];
       const l = side * (s.hw + sh + LIP);
@@ -92,6 +107,10 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
       const v = (k === N ? track.length : s.s) / 10;
       pos.set([x, s.y + 0.03, z, x, 0, z], k * 6);
       uv.set([v, s.y / 10, v, 0], k * 4);
+      if (col) {
+        const c = tintOf(s);
+        col.set([c.r, c.g, c.b, c.r, c.g, c.b], k * 6);
+      }
     }
     const idx: number[] = [];
     for (let k = 0; k < N; k++) {
@@ -102,6 +121,7 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    if (col) geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, skirtMat);
@@ -123,7 +143,12 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
   const eul = new THREE.Euler(0, 0, 0, 'YXZ');
   const one = new THREE.Vector3(1, 1, 1);
   const p = new THREE.Vector3();
-  const barrierCols = new Map(Object.entries(look.barrier).map(([k, [a, b]]) => [k, [new THREE.Color(a), new THREE.Color(b)]]));
+  const barrierCols = new Map<string, THREE.Color[]>();
+  const barrierOf = (s: Sample): THREE.Color[] => {
+    let c = barrierCols.get(s.surface);
+    if (!c) barrierCols.set(s.surface, (c = (look.barrier[s.surface] ?? look.barrier.floor).map((h) => new THREE.Color(h))));
+    return c;
+  };
   let n = 0;
   for (const side of [-1, 1]) {
     for (let j = 0; j < per; j++) {
@@ -136,7 +161,7 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
       quat.setFromEuler(eul);
       m4.compose(p, quat, one);
       barriers.setMatrixAt(n, m4);
-      barriers.setColorAt(n, barrierCols.get(s.surface)![j % 2]);
+      barriers.setColorAt(n, barrierOf(s)[j % 2]);
       n++;
     }
   }
@@ -196,6 +221,39 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
     mesh.rotation.set(-Math.PI / 2, Math.atan2(s.tx, s.tz) + Math.PI, 0);
     mesh.position.set(s.x + s.nx * pd.lat, s.y + 0.07, s.z + s.nz * pd.lat);
     g.add(mesh);
+  }
+
+  // Charcos de jabón: espuma blanca y azul con burbujas.
+  if (track.slicks.length) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const cg = c.getContext('2d')!;
+    const grd = cg.createRadialGradient(64, 64, 8, 64, 64, 62);
+    grd.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grd.addColorStop(0.6, 'rgba(200,236,255,0.85)');
+    grd.addColorStop(1, 'rgba(200,236,255,0)');
+    cg.fillStyle = grd;
+    cg.beginPath();
+    cg.ellipse(64, 64, 62, 62, 0, 0, Math.PI * 2);
+    cg.fill();
+    cg.strokeStyle = 'rgba(120,190,235,0.9)';
+    cg.lineWidth = 3;
+    for (const [x, y, r] of [[40, 44, 10], [80, 36, 7], [70, 78, 12], [36, 84, 6], [92, 70, 5]]) {
+      cg.beginPath();
+      cg.arc(x, y, r, 0, Math.PI * 2);
+      cg.stroke();
+    }
+    const soapTex = new THREE.CanvasTexture(c);
+    soapTex.colorSpace = THREE.SRGBColorSpace;
+    const soapMat = new THREE.MeshBasicMaterial({ map: soapTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+    for (const sl of track.slicks) {
+      const s = S[(sl.i + Math.floor(sl.len / 2)) % N];
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sl.hw * 2.2, sl.len * 1.1), soapMat);
+      mesh.rotation.order = 'YXZ';
+      mesh.rotation.set(-Math.PI / 2, Math.atan2(s.tx, s.tz), 0);
+      mesh.position.set(s.x + s.nx * sl.lat, s.y + 0.08, s.z + s.nz * sl.lat);
+      g.add(mesh);
+    }
   }
 
   return {

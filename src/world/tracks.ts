@@ -7,6 +7,8 @@ import type { Quality } from '../core/quality';
 import type { Rng } from '../core/rng';
 import { ROOM_TRACK } from './roomTrack';
 import { buildRoom } from './room';
+import { BATH_TRACK } from './bathTrack';
+import { buildBath } from './bath';
 
 /** Luz, cielo y colores de la pista. */
 export interface TrackLook {
@@ -16,11 +18,18 @@ export interface TrackLook {
   hemi: { sky: number; ground: number; intensity: number };
   sun: { color: number; intensity: number; dir: [number, number, number] };
   exposure: number;
-  /** Franja lateral (alfombra) según la superficie. */
-  shoulder: Record<Surface, number>;
-  /** Pares de colores de las barreras según la superficie. */
-  barrier: Record<Surface, [number, number]>;
+  /** Franja lateral (alfombra) según la superficie. Las que falten usan la del suelo. */
+  shoulder: Partial<Record<Surface, number>> & { floor: number };
+  /** Pares de colores de las barreras según la superficie. Las que falten usan los del suelo. */
+  barrier: Partial<Record<Surface, [number, number]>> & { floor: [number, number] };
+  /** Polvo que levantan los karts fuera del asfalto. Sin él: el color de la franja lateral. */
+  dust?: Partial<Record<Surface, number>>;
+  /** Faldón bajo los tramos elevados: textura y tinte por superficie (sin tinte: blanco). */
+  skirt?: { tex: 'cardboard' | 'towel'; tint?: Partial<Record<Surface, number>> };
 }
+
+export const shoulderColor = (look: TrackLook, s: Surface): number => look.shoulder[s] ?? look.shoulder.floor;
+export const dustColor = (look: TrackLook, s: Surface): number => look.dust?.[s] ?? shoulderColor(look, s);
 
 interface TrackBase {
   id: string;
@@ -65,11 +74,37 @@ export const TRACKS: TrackEntry[] = [
       sun: { color: 0xfff0d6, intensity: 2.3, dir: [0.25, 1, 0.6] },
       exposure: 1.05,
       shoulder: { floor: 0x63a85a, ramp: 0xc99f68, bed: 0xf3ea9c },
+      dust: { floor: 0x9fcf8a, ramp: 0xd8b484, bed: 0xf3ea9c },
       barrier: { floor: ROOM_BARRIER_FLOOR, ramp: ROOM_BARRIER_UP, bed: ROOM_BARRIER_UP },
     },
     scenery: buildRoom,
   },
-  { id: 'bano', name: 'Bañera Burbujeante', blurb: 'Por el borde de la bañera', ready: false },
+  {
+    id: 'bano',
+    name: 'Bañera Burbujeante',
+    blurb: 'Por el borde de la bañera',
+    ready: true,
+    def: BATH_TRACK,
+    seed: 'bano',
+    podium: { x: 40, z: 40, yaw: Math.PI },
+    look: {
+      sky: 0xb4e2ee,
+      fog: [280, 800],
+      hemi: { sky: 0xf2fbff, ground: 0x8fb3c4, intensity: 1.3 },
+      sun: { color: 0xfffaf0, intensity: 2.2, dir: [-0.25, 1, 0.55] },
+      exposure: 1.05,
+      shoulder: { floor: 0x7fc4d8, mat: 0xf28cbc, towel: 0xff9f5a, rim: 0xeef3f6, sponge: 0xffd84a },
+      barrier: {
+        floor: [0x2f9bd6, 0xf6f3ee],
+        mat: [0xf07ab0, 0xf6f3ee],
+        towel: [0xff8a3a, 0xffd23a],
+        rim: [0xff7ab8, 0xffffff],
+        sponge: [0x3fb24a, 0xffd23a],
+      },
+      skirt: { tex: 'towel', tint: { towel: 0xff9f5a, rim: 0xffffff, sponge: 0xffd84a } },
+    },
+    scenery: buildBath,
+  },
   { id: 'jardin', name: 'Jardín de Noche', blurb: 'Luciérnagas y farolitos', ready: false },
 ];
 

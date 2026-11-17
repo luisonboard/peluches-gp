@@ -7,6 +7,7 @@ import { NO_CTL, TUNING } from './kart';
 import type { AIDriver, AIContext } from './ai';
 import type { Arena } from './arena';
 import { applyAssist, type AssistOpts } from './assist';
+import type { Hazard } from './obstacles';
 
 export type Phase = 'grid' | 'countdown' | 'racing' | 'done';
 
@@ -38,12 +39,14 @@ export class Race {
   private finished = 0;
   private prevItem: boolean[] = [];
   private prevPower: boolean[] = [];
-  private readonly ctx: AIContext = { order: [], level: 0, gums: [] };
+  private readonly ctx: AIContext = { order: [], level: 0, gums: [], hazards: [] };
   /** Para el poder automático del jugador: decide como un piloto atento. */
-  private readonly playerCtx: AIContext = { order: [], level: 2, gums: [] };
+  private readonly playerCtx: AIContext = { order: [], level: 2, gums: [], hazards: [] };
   private readonly assisted: KartCtl = { ...NO_CTL };
   assist: AssistOpts = { autoAccel: false, smartSteer: false };
   autoPower = false;
+  /** Obstáculos de la pista (patitos): la IA y la dirección asistida los esquivan. */
+  hazards: readonly Hazard[] = [];
   /** false en los invitados: el anfitrión decide los puestos de llegada. */
   authority = true;
   /** Un kart de este dispositivo cruzó la meta (invitado: avisar al anfitrión). */
@@ -131,6 +134,7 @@ export class Race {
     this.time += dt;
     this.ctx.order = this.order;
     this.ctx.gums = this.arena.activeGums;
+    this.ctx.hazards = this.playerCtx.hazards = this.hazards;
     for (let n = 0; n < this.karts.length; n++) {
       const k = this.karts[n];
       if (k.remote) {
@@ -140,7 +144,7 @@ export class Race {
       const useAi = !k.isPlayer || this.autoplay || k.finished;
       let ctl = useAi ? this.ais[n].drive(k, dt, true, this.ctx) : playerCtl;
       if (!useAi) {
-        ctl = applyAssist(k, playerCtl, this.assist, this.assisted);
+        ctl = applyAssist(k, playerCtl, this.assist, this.assisted, this.hazards);
         if (this.autoPower && k.power >= 1) {
           this.playerCtx.order = this.order;
           this.playerCtx.gums = this.ctx.gums;

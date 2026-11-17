@@ -134,6 +134,8 @@ export class Kart {
   private hopDrift = false;
   private bumpCooldown = 0;
   private padCooldown = 0;
+  /** Resbalando por un charco de jabón (s). */
+  slipT = 0;
   private readonly loc = newLoc();
 
   constructor(
@@ -159,7 +161,7 @@ export class Kart {
     this.finished = false;
     this.place = 0;
     this.drift = this.driftCharge = this.driftLevel = this.driftVisual = 0;
-    this.boostT = this.startHold = this.wrongWayT = 0;
+    this.boostT = this.startHold = this.wrongWayT = this.slipT = 0;
     this.item = null;
     this.rouletteT = this.power = this.hitT = this.invulnT = this.shrinkT = this.fireT = this.reachT = this.stretchT = 0;
     this.hitKind = '';
@@ -287,12 +289,15 @@ export class Kart {
       yawRate = this.steerS * T.turnRate * low * high * (this.speed < 0 ? -1 : 1);
     }
     if (!this.grounded) yawRate *= 0.6;
+    if (this.slipT > 0) yawRate *= 0.75;
     this.heading = wrapAngle(this.heading - yawRate * dt);
 
     // Velocidad real: se acerca a la dirección del morro según el agarre (en derrape, desliza).
     const fx = Math.sin(this.heading);
     const fz = Math.cos(this.heading);
-    const grip = !this.grounded ? 0.6 : this.drift !== 0 ? T.gripDrift : T.grip;
+    if (this.slipT > 0) this.slipT -= dt;
+    const slip = this.slipT > 0 ? 0.25 : 1;
+    const grip = !this.grounded ? 0.6 : (this.drift !== 0 ? T.gripDrift : T.grip) * slip;
     const kf = 1 - Math.exp(-grip * dt);
     this.vel.x += (fx * this.speed - this.vel.x) * kf;
     this.vel.z += (fz * this.speed - this.vel.z) * kf;
@@ -379,6 +384,18 @@ export class Kart {
         if (d < p.len && Math.abs(L.lat - p.lat) < p.hw) {
           this.boost('pad', T.padBoost);
           this.padCooldown = 0.5;
+          break;
+        }
+      }
+    }
+    // Charcos de jabón: el kart patina un momento (menos agarre y menos giro), sin perder el control del todo.
+    if (this.grounded && this.slipT <= 0.2) {
+      for (const p of tr.slicks) {
+        let d = L.i - p.i;
+        if (d < 0) d += tr.N;
+        if (d < p.len && Math.abs(L.lat - p.lat) < p.hw) {
+          if (this.slipT <= 0) bus.emit('kart:slip', { kart: this.index });
+          this.slipT = 0.7;
           break;
         }
       }
