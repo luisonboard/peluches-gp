@@ -63,9 +63,16 @@ interface Bubble {
   owner: number;
   target: Kart | null;
 }
+/** Mano telescópica de Robotín: viaja por la pista hasta el kart de delante y vuelve encogiendo el brazo. */
 interface Missile {
   id: string;
   on: boolean;
+  /** 'reach' = estirándose; 'back' = ya agarró y el brazo se encoge. */
+  phase: 'reach' | 'back';
+  /** Posición donde agarró (para encoger desde ahí). */
+  gx: number;
+  gy: number;
+  gz: number;
   /** Progreso absoluto (vueltas × N + índice). */
   prog: number;
   lat: number;
@@ -107,6 +114,8 @@ export class Arena {
   private gumMeshes: THREE.Mesh[] = [];
   private bubbleMeshes: THREE.Mesh[] = [];
   private missileMeshes: THREE.Object3D[] = [];
+  /** Tramos del brazo telescópico (ARM_SEG por mano). */
+  private armMeshes: THREE.Mesh[][] = [];
   private ringMeshes: THREE.Mesh[] = [];
   private boltMeshes: THREE.Mesh[] = [];
   private readonly loc = newLoc();
@@ -208,21 +217,32 @@ export class Arena {
       this.bubbleMeshes.push(m);
       this.group.add(m);
     }
+    // Mano telescópica: ventosa azul en un puño rojo, y tramos grises que se meten unos dentro de otros.
     const red = new THREE.MeshStandardMaterial({ color: 0xd83a2a, roughness: 0.35 });
     const grey = new THREE.MeshStandardMaterial({ color: 0xc8d0d8, roughness: 0.3, metalness: 0.4 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x3a8fe0, roughness: 0.3 });
+    const segGeo = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
     for (let i = 0; i < 6; i++) {
-      this.missiles.push({ id: '', on: false, prog: 0, lat: 0, x: 0, y: 0, z: 0, t: 0, owner: -1, target: null });
+      this.missiles.push({ id: '', on: false, phase: 'reach', gx: 0, gy: 0, gz: 0, prog: 0, lat: 0, x: 0, y: 0, z: 0, t: 0, owner: -1, target: null });
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1.3, 14).rotateX(Math.PI / 2), red);
-      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.4, 14).rotateX(-Math.PI / 2).translate(0, 0, -0.85), grey);
-      const magnet = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.11, 8, 16, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 0, 0.75), red);
-      const tips = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.7, 0.2).translate(0, 0, 0.82), grey);
-      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.35).translate(0, 0, -0.5), grey);
-      g.add(body, tail, magnet, tips, fin);
+      const fist = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), red);
+      const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.3, 14).rotateX(Math.PI / 2).translate(0, 0, -0.3), grey);
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.22, 0.2, 18).rotateX(Math.PI / 2).translate(0, 0, 0.34), blue);
+      g.add(fist, cuff, cup);
       g.traverse((o) => ((o as THREE.Mesh).castShadow = true));
       g.visible = false;
       this.missileMeshes.push(g);
       this.group.add(g);
+      const segs: THREE.Mesh[] = [];
+      for (let j = 0; j < ARM_SEG; j++) {
+        const m = new THREE.Mesh(segGeo, j % 2 ? grey : new THREE.MeshStandardMaterial({ color: 0xa9b2bc, roughness: 0.3, metalness: 0.5 }));
+        m.castShadow = true;
+        m.visible = false;
+        m.frustumCulled = false;
+        segs.push(m);
+        this.group.add(m);
+      }
+      this.armMeshes.push(segs);
     }
     const ringGeo = new THREE.TorusGeometry(1, 0.06, 6, 48).rotateX(Math.PI / 2);
     for (let i = 0; i < 10; i++) {
@@ -360,7 +380,10 @@ export class Arena {
         return;
       case 'robot': {
         const ms = this.free(this.missiles);
-        if (ms) Object.assign(ms, { on: true, id: m.id, prog: m.prog ?? k.progress + 2.5, lat: m.lat ?? 0, x: m.x, y: m.y + 1, z: m.z, t: 0, owner: k.index, target });
+        if (ms) {
+          Object.assign(ms, { on: true, phase: 'reach', id: m.id, prog: m.prog ?? k.progress + 2.5, lat: m.lat ?? 0, x: m.x, y: m.y + 1.8, z: m.z, t: 0, owner: k.index, target });
+          k.reachT = ARM_REACH_TIME + ARM_BACK_TIME;
+        }
         return;
       }
     }
@@ -372,7 +395,11 @@ export class Arena {
       for (const o of arr) {
         if (o.on && o.id === id) {
           o.on = false;
-          if (arr === (this.missiles as unknown)) this.explode(o.x, o.y, o.z, true);
+          // La mano ya atrapó a su rival en el dispositivo de ese rival: aquí también se encoge y jala.
+          if (arr === (this.missiles as unknown)) {
+            o.on = true;
+            this.grab(o as unknown as Missile, true);
+          }
         }
       }
     }
@@ -477,6 +504,10 @@ export class Arena {
   /** `racing` = false durante la parrilla y la cuenta atrás (solo se animan las cajas). */
   update(dt: number, racing: boolean, cam: THREE.Camera): void {
     this.time += dt;
+    for (const k of this.karts) {
+      if (k.reachT > 0) k.reachT -= dt;
+      if (k.stretchT > 0) k.stretchT -= dt;
+    }
     this.updateBoxes(dt, racing);
     if (racing) {
       for (const k of this.karts) {
@@ -661,46 +692,127 @@ export class Arena {
     });
   }
 
+  /** Hombro derecho de Robotín en el mundo (de ahí sale el brazo telescópico). */
+  private shoulder(k: Kart, out: THREE.Vector3): THREE.Vector3 {
+    const h = k.heading;
+    const s = k.shrinkScale;
+    const lift = k.stretchT > 0 ? 1 : 0;
+    return out.set(
+      k.pos.x + (Math.cos(h) * 0.52 - Math.sin(h) * 0.35) * s,
+      k.pos.y + (1.85 + lift) * s + k.bubbleLift,
+      k.pos.z + (-Math.sin(h) * 0.52 - Math.cos(h) * 0.35) * s,
+    );
+  }
+
+  /** La mano se agarró (a un rival o a la pista): el brazo se encoge y jala a Robotín hacia delante. */
+  private grab(m: Missile, caught: boolean): void {
+    if (m.phase === 'back') return;
+    m.phase = 'back';
+    m.t = 0;
+    m.gx = m.x;
+    m.gy = m.y;
+    m.gz = m.z;
+    const k = this.karts[m.owner];
+    if (!k) return;
+    k.reachT = ARM_BACK_TIME;
+    k.stretchT = caught ? 1.6 : 1.1;
+    if (!k.remote && !k.finished && k.hitT <= 0) {
+      const secs = caught ? 2.0 : 1.2;
+      k.boost('pad', secs);
+      k.speed = Math.max(k.speed, TUNING.maxSpeed * (caught ? 1.25 : 1.1));
+      k.invulnT = Math.max(k.invulnT, secs);
+    }
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.sparks.spawn(m.x, m.y, m.z, Math.cos(a) * 5, 2 + Math.random() * 3, Math.sin(a) * 5, 0.35, 0.7, 0.1, i % 2 ? 0x6ae8ff : 0xffffff, 1, 6, 2);
+    }
+    bus.emit('fx:grab', { kart: k.index, caught });
+  }
+
   private updateMissiles(dt: number): void {
     const tr = this.track;
     const N = tr.N;
+    const o = this.v;
     this.missiles.forEach((m, i) => {
       const obj = this.missileMeshes[i];
-      if (!m.on) {
+      const segs = this.armMeshes[i];
+      const owner = this.karts[m.owner];
+      if (!m.on || !owner) {
+        m.on = false;
         obj.visible = false;
+        for (const sg of segs) sg.visible = false;
         return;
       }
       m.t += dt;
-      const speed = (TUNING.maxSpeed * 1.9) / tr.step;
-      m.prog += speed * dt;
-      const t = m.target;
-      if (t && !t.finished) {
-        const gap = t.progress - m.prog;
-        m.lat += (t.lat - m.lat) * Math.min(1, dt * (gap < 25 ? 6 : 1.5));
-        if (gap < 1.5 && Math.abs(t.lat - m.lat) < 3) {
-          if (this.hit(t, 'tumble', m.owner)) this.kill(m.id);
-          this.explode(t.pos.x, t.pos.y + 1, t.pos.z, true);
-          m.on = false;
+      this.shoulder(owner, o);
+      let nx: number;
+      let ny: number;
+      let nz: number;
+      let s = tr.samples[0];
+      if (m.phase === 'reach') {
+        const speed = (TUNING.maxSpeed * 2.6) / tr.step;
+        m.prog += speed * dt;
+        const t = m.target;
+        const idx = Math.floor(m.prog);
+        s = tr.samples[((idx % N) + N) % N];
+        const s2 = tr.samples[(((idx + 1) % N) + N) % N];
+        const f = m.prog - idx;
+        if (t && !t.finished) {
+          const gap = t.progress - m.prog;
+          m.lat += (t.lat - m.lat) * Math.min(1, dt * (gap < 25 ? 6 : 1.5));
+        } else m.lat += (owner.lat - m.lat) * Math.min(1, dt * 2);
+        nx = s.x + (s2.x - s.x) * f + s.nx * m.lat;
+        nz = s.z + (s2.z - s.z) * f + s.nz * m.lat;
+        ny = s.y + (s2.y - s.y) * f + 1.3;
+        m.x = nx;
+        m.y = ny;
+        m.z = nz;
+        if (t && !t.finished && t.progress - m.prog < 1.5 && Math.abs(t.lat - m.lat) < 3) {
+          // ¡Atrapado! La ventosa se pega al rival, que da vueltas.
+          m.x = t.pos.x;
+          m.y = t.pos.y + 1.2;
+          m.z = t.pos.z;
+          if (this.hit(t, 'spin', m.owner)) this.kill(m.id);
+          this.grab(m, true);
+        } else if (m.t > ARM_REACH_TIME) {
+          // No llegó (o no hay nadie delante): se agarra de la pista y se jala igual, con menos fuerza.
+          this.grab(m, false);
         }
-      }
-      const idx = Math.floor(m.prog);
-      const s = tr.samples[((idx % N) + N) % N];
-      const s2 = tr.samples[(((idx + 1) % N) + N) % N];
-      const f = m.prog - idx;
-      const nx = s.x + (s2.x - s.x) * f + s.nx * m.lat;
-      const nz = s.z + (s2.z - s.z) * f + s.nz * m.lat;
-      const ny = s.y + (s2.y - s.y) * f + 1.2 + Math.sin(m.t * 10) * 0.1;
-      obj.position.set(nx, ny, nz);
-      obj.rotation.set(0, Math.atan2(nx - m.x, nz - m.z), Math.sin(m.t * 8) * 0.3);
-      m.x = nx;
-      m.y = ny;
-      m.z = nz;
-      if (Math.random() < 0.8) this.dust.spawn(nx - s.tx * 1, ny, nz - s.tz * 1, 0, 0.6, 0, 0.6, 0.4, 1.4, 0xe8e4e0, 0.5, -0.5, 1);
-      if (m.on && (m.t > 10 || (!t && m.t > 3))) {
-        this.explode(nx, ny, nz, false);
-        m.on = false;
+      } else {
+        // Encogiendo: la mano vuelve al hombro.
+        const u = Math.min(1, m.t / ARM_BACK_TIME);
+        const e = u * u;
+        nx = m.gx + (o.x - m.gx) * e;
+        ny = m.gy + (o.y - m.gy) * e;
+        nz = m.gz + (o.z - m.gz) * e;
+        if (u >= 1) m.on = false;
+        m.x = nx;
+        m.y = ny;
+        m.z = nz;
       }
       obj.visible = m.on;
+      obj.position.set(m.x, m.y, m.z);
+      obj.rotation.set(0, Math.atan2(m.x - o.x, m.z - o.z), 0);
+      // Tramos telescópicos del hombro a la mano, cada uno más fino y algo solapado con el anterior.
+      const dx = m.x - o.x;
+      const dy = m.y - o.y;
+      const dz = m.z - o.z;
+      const len = Math.hypot(dx, dy, dz);
+      this.sc.set(dx, dy, dz).divideScalar(Math.max(1e-4, len));
+      this.q.setFromUnitVectors(this.up, this.sc);
+      const part = len / ARM_SEG;
+      for (let j = 0; j < ARM_SEG; j++) {
+        const sg = segs[j];
+        sg.visible = m.on && len > 0.3;
+        if (!sg.visible) continue;
+        const a = Math.max(0, j * part - 0.15);
+        const b = (j + 1) * part;
+        const mid = (a + b) / 2;
+        const r = 0.15 - j * 0.022;
+        sg.position.set(o.x + this.sc.x * mid, o.y + this.sc.y * mid, o.z + this.sc.z * mid);
+        sg.quaternion.copy(this.q);
+        sg.scale.set(r, b - a, r);
+      }
     });
   }
 
@@ -784,4 +896,8 @@ export class Arena {
   }
 }
 
+/** Tramos del brazo telescópico de Robotín y sus tiempos (s). */
+const ARM_SEG = 5;
+const ARM_REACH_TIME = 1.8;
+const ARM_BACK_TIME = 0.3;
 const BOLT_SEG = 12;

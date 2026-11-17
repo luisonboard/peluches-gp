@@ -24,7 +24,7 @@ export const CHARACTERS: CharacterDef[] = [
   { id: 'raton', defaultName: 'Chispa', label: 'Ratón eléctrico', color: 0xf6cf2a, accent: 0xd8302a, kart: 0xe2453a, power: 'Rayo', powerDesc: 'Encoge a los que van delante' },
   { id: 'zorro', defaultName: 'Kitsu', label: 'Zorro', color: 0xf0862a, accent: 0x2a2a35, kart: 0x8a4fd8, power: 'Llama de zorro', powerDesc: 'Supervelocidad con fuego' },
   { id: 'dino', defaultName: 'Dino', label: 'Dinosaurio', color: 0x9cc48a, accent: 0xf1e6b0, kart: 0xf2a33a, power: 'Pisotón', powerDesc: 'Hace temblar el suelo' },
-  { id: 'robot', defaultName: 'Robotín', label: 'Robot', color: 0xd83a2a, accent: 0x9aa3ad, kart: 0x3d4350, power: 'Misil imán', powerDesc: 'Persigue al de delante' },
+  { id: 'robot', defaultName: 'Robotín', label: 'Robot', color: 0xd83a2a, accent: 0x9aa3ad, kart: 0x3d4350, power: 'Brazos telescópicos', powerDesc: 'Estira el brazo, atrapa al de delante y se impulsa' },
 ];
 
 export function displayName(c: CharacterDef): string {

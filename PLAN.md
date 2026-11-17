@@ -33,7 +33,7 @@ Cada personaje tiene una
 | Ratón eléctrico amarillo | **Chispa** | Rayo | Encoge y frena 3 s a todos los que van por delante |
 | Zorro naranja de nueve colas | **Kitsu** | Llama de zorro | Supervelocidad envuelta en fuego, invulnerable, aparta a quien toque |
 | Dinosaurio verde | **Dino** | Pisotón | Salta y, al caer, provoca un temblor que frena a los cercanos y destruye trampas |
-| Robot rojo | **Robotín** | Misil imán | Un misil sigue la pista y alcanza al rival que va justo delante |
+| Robot rojo | **Robotín** | Brazos telescópicos | Estira el brazo hasta el rival de delante, lo atrapa con la ventosa y se jala hacia él estirando las piernas |
 
 Objetos genéricos de las **cajas regalo**: turbo cohete, pelota saltarina (rebota en las paredes) y chicle
 pegajoso (trampa). Los que van atrás reciben más turbos y los que van delante, más trampas.

@@ -208,9 +208,15 @@ export class GameAudio {
     this.tone(70, 0.9, 'sine', 0.4 * vol, 0, 30);
     this.noise(0.8, 300, 60, 0.35 * vol, 'lowpass');
   }
-  missile(vol = 1): void {
-    this.noise(0.6, 800, 2500, 0.2 * vol);
-    [1200, 1200, 1200].forEach((f, i) => this.tone(f, 0.05, 'square', 0.06 * vol, 0.15 + i * 0.12));
+  /** Brazo telescópico que se estira: zumbido que sube con clics de cada tramo. */
+  stretch(vol = 1): void {
+    this.tone(220, 0.45, 'sawtooth', 0.06 * vol, 0, 900);
+    [0, 0.1, 0.2, 0.3].forEach((d, i) => this.tone(1400 + i * 200, 0.03, 'square', 0.05 * vol, d));
+  }
+  /** La mano se agarra y el brazo se encoge de golpe: ¡boing! */
+  boing(vol = 1, caught = true): void {
+    this.tone(caught ? 700 : 500, 0.4, 'triangle', 0.16 * vol, 0, 140);
+    this.tone(caught ? 350 : 250, 0.3, 'sine', 0.12 * vol, 0.05, 900);
   }
   explosion(vol = 1, big = false): void {
     this.noise(big ? 0.9 : 0.5, 900, 50, (big ? 0.45 : 0.3) * vol, 'lowpass');

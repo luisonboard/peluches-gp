@@ -21,6 +21,8 @@ export interface EventMap {
   'fx:explode': { x: number; y: number; z: number; big: boolean };
   'fx:quake': { kart: number; x: number; y: number; z: number };
   'fx:lightning': { kart: number };
+  /** La mano telescópica de Robotín se agarra (a un rival si `caught`, si no a la pista) y lo jala. */
+  'fx:grab': { kart: number; caught: boolean };
 }
 
 export type HitKind = 'spin' | 'stuck' | 'bubble' | 'shrink' | 'tumble';

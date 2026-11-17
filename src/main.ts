@@ -473,7 +473,7 @@ function volAt(x: number, z: number): number {
 }
 const volKart = (i: number): number => (i === 0 ? 1 : karts[i] ? volAt(karts[i].pos.x, karts[i].pos.z) : 0);
 const POWER_SAY: Record<string, string> = {
-  perro: '¡Guau guau!', esponja: '¡Burbuja!', raton: '¡Rayo!', zorro: '¡Fuego de zorro!', dino: '¡Pisotón!', robot: '¡Misil imán!',
+  perro: '¡Guau guau!', esponja: '¡Burbuja!', raton: '¡Rayo!', zorro: '¡Fuego de zorro!', dino: '¡Pisotón!', robot: '¡Brazos telescópicos!',
 };
 
 bus.on('box:open', ({ kart }) => {
@@ -501,7 +501,12 @@ bus.on('power:use', ({ kart, power }) => {
   } else if (power === 'esponja') audio.bubble(v);
   else if (power === 'zorro') audio.fire(v);
   else if (power === 'dino') audio.jump(v);
-  else if (power === 'robot') audio.missile(v);
+  else if (power === 'robot') audio.stretch(v);
+});
+bus.on('fx:grab', ({ kart, caught }) => {
+  const v = volKart(kart);
+  audio.boing(v, caught);
+  if (kart === 0 && caught) chase.shake(0.25);
 });
 bus.on('fx:lightning', () => {
   audio.thunder();

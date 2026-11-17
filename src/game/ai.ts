@@ -142,7 +142,8 @@ export class AIDriver {
             use = !!ahead && gapTo(ahead) < 110;
             break;
           case 'robot':
-            use = !!ahead;
+            // El brazo alcanza unos 80 m de ventaja; si va primero, se jala de la pista en una recta.
+            use = ahead ? gapTo(ahead) < 80 : straight;
             break;
           case 'raton':
             use = k.position >= (ctx.level === 2 ? 2 : 3);

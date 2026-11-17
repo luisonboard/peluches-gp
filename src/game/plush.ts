@@ -12,6 +12,10 @@ export interface PlushPose {
   cheer: number;
   /** 1 mientras recibe un golpe. */
   hurt: number;
+  /** Robotín: 1 mientras su brazo derecho está estirado lejos (se oculta el del modelo). */
+  reach?: number;
+  /** Robotín: 0..1 piernas telescópicas estiradas (se eleva sobre el kart). */
+  stretch?: number;
 }
 
 export interface PlushRig {
@@ -190,6 +194,11 @@ class Builder {
   }
 }
 
+/** Piernas telescópicas de Robotín: tramos, largo de cada tramo y cuánto se eleva. */
+const LEG_SEG = 3;
+const LEG_LEN = 0.42;
+const LEG_RISE = 1;
+
 // Volante del kart en coordenadas del piloto (el piloto está en (0, 0.9, -0.35) del kart).
 const WHEEL_L: V3 = [-0.22, 0.42, 0.68];
 const WHEEL_R: V3 = [0.22, 0.42, 0.68];
@@ -204,6 +213,9 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
   const ears: THREE.Object3D[] = [];
   const tails: THREE.Object3D[] = [];
   const arms: THREE.Object3D[] = [];
+  /** Tramos de las piernas telescópicas de Robotín: [pierna][tramo], y los pies. */
+  const legSegs: THREE.Object3D[][] = [];
+  const feet: THREE.Object3D[] = [];
 
   const armPair = (mat: THREE.Material, shoulderY: number, shoulderX: number, r: number, hand?: THREE.Material): void => {
     for (const sx of [-1, 1]) {
@@ -385,6 +397,16 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
         b.mesh(CYL, M.flat(0x3a8fe0, 0.3), local, [0.1, 0.04, 0.1], [Math.PI / 2, 0, 0], pivot);
         arms.push(pivot);
       }
+      // Piernas telescópicas: tres tramos que se meten uno dentro de otro bajo el cuerpo, con ventosas de pie.
+      for (const sx of [-1, 1]) {
+        const segs: THREE.Object3D[] = [];
+        for (let j = 0; j < LEG_SEG; j++) {
+          const m = b.mesh(CYL, j % 2 ? grey : M.flat(0xb8c0c8, 0.3), [sx * 0.24, 0.2, 0.02], [0.11 - j * 0.017, LEG_LEN, 0.11 - j * 0.017]);
+          segs.push(m);
+        }
+        legSegs.push(segs);
+        feet.push(b.mesh(CYL, M.flat(0x3a8fe0, 0.3), [sx * 0.24, 0, 0.06], [0.14, 0.05, 0.17]));
+      }
       break;
     }
   }
@@ -400,11 +422,17 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
   // Orden ZYX: primero se levanta el brazo (X) y luego se abre hacia el lado (Z).
   // El robot tiene hombros anchos y codos, y ya celebra sin chocar.
   const spread = c.id === 'robot' ? 0 : 1;
+  const legTop = 0.42;
   if (spread) for (const a of arms) a.rotation.order = 'ZYX';
   return {
     group,
     update(p: PlushPose) {
       const sp = Math.min(1, Math.abs(p.speed) / 30);
+      const stretch = p.stretch ?? 0;
+      const rise = stretch * LEG_RISE;
+      // Al estirar las piernas, Robotín levanta los brazos de alegría.
+      const cheer = Math.max(p.cheer, stretch);
+      p = { ...p, cheer };
       head.rotation.y = -p.steerS * 0.28;
       head.rotation.z = p.steerS * 0.08 + Math.sin(p.t * 3) * 0.02 * (1 - sp) + p.hurt * Math.sin(p.t * 25) * 0.15;
       head.rotation.x = -sp * 0.06 + p.cheer * -0.2;
@@ -421,7 +449,21 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
         const side = i % 2 ? 1 : -1;
         a.rotation.z = p.steerS * 0.12 * side - side * spread * p.cheer * (1.0 + 0.12 * Math.sin(p.t * 10 + i * 3));
       });
-      group.position.y = Math.abs(Math.sin(p.t * 14)) * 0.03 * sp + p.cheer * Math.abs(Math.sin(p.t * 8)) * 0.15;
+      group.position.y = Math.abs(Math.sin(p.t * 14)) * 0.03 * sp + p.cheer * Math.abs(Math.sin(p.t * 8)) * 0.15 * (1 - stretch) + rise;
+      if (legSegs.length) {
+        // Cada tramo baja un poco más que el anterior hasta tocar el asiento (y = 0 del kart → −group.y aquí).
+        const bottom = -group.position.y;
+        const total = legTop - bottom;
+        legSegs.forEach((segs, li) => {
+          segs.forEach((m, j) => {
+            const top = legTop - (j * Math.max(0, total - LEG_LEN)) / (LEG_SEG - 1);
+            m.position.y = top - LEG_LEN / 2;
+          });
+          feet[li].position.y = Math.min(0.02, bottom + 0.02);
+        });
+        // El brazo derecho viaja lejos convertido en mano telescópica.
+        if (arms[1]) arms[1].visible = !(p.reach && p.reach > 0);
+      }
     },
   };
 }

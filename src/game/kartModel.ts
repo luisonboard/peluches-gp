@@ -40,6 +40,8 @@ export interface KartPose {
   fireT: number;
   assisted: boolean;
   showoff: boolean;
+  reachT: number;
+  stretchT: number;
 }
 
 export class KartModel {
@@ -53,6 +55,7 @@ export class KartModel {
   private readonly bubble: THREE.Mesh;
   private readonly lift = new THREE.Group();
   private cheer = 0;
+  private stretch = 0;
   private star: THREE.Mesh | null = null;
   private t = Math.random() * 10;
   private pitch = 0;
@@ -163,7 +166,11 @@ export class KartModel {
       this.star.position.y = 1.5 + Math.sin(this.t * 3) * 0.12;
       this.star.scale.setScalar(1 + Math.sin(this.t * 6) * 0.1);
     }
-    this.plush.update({ steerS: k.steerS, speed: k.speed, t: this.t, cheer: this.cheer, hurt: k.hitT > 0 && k.hitKind !== 'stuck' ? 1 : 0 });
+    this.stretch += ((k.stretchT > 0 ? 1 : 0) - this.stretch) * Math.min(1, dt * (k.stretchT > 0 ? 12 : 5));
+    this.plush.update({
+      steerS: k.steerS, speed: k.speed, t: this.t, cheer: this.cheer, hurt: k.hitT > 0 && k.hitKind !== 'stuck' ? 1 : 0,
+      reach: k.reachT > 0 ? 1 : 0, stretch: this.stretch,
+    });
     const targetPitch = k.grounded ? -Math.atan(k.slope) : -Math.atan2(k.vy, Math.max(8, Math.abs(k.speed))) * 0.6;
     this.pitch += (targetPitch - this.pitch) * Math.min(1, dt * 10);
     const sp01 = Math.min(1, Math.abs(k.speed) / 30);

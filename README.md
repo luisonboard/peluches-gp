@@ -101,7 +101,7 @@ Errores en `window.__errors`; estado en `window.__game` (por ejemplo, `__game.TU
   | Chispa | Rayo | Relámpago sobre todos los que van delante: se encogen y frenan 3 s (un kart normal los aplasta) |
   | Kitsu | Llama de zorro | 3,5 s de supervelocidad con fuego, invulnerable; aparta a quien toca |
   | Dino | Pisotón | Salto y temblor al caer: voltereta a quien esté a menos de 18 m; rompe los chicles |
-  | Robotín | Misil imán | Sigue la pista hasta el kart de delante y lo voltea |
+  | Robotín | Brazos telescópicos | Estira el brazo con su ventosa, atrapa al de delante (lo hace girar) y se jala con un impulso mientras estira las piernas. Si va primero, se agarra de la pista |
 
 - 16 cajas regalo en 4 filas (reaparecen a los 2,5 s) con ruleta de 1 s y 3 objetos: turbo cohete, pelota saltarina
   (rebota en las barreras) y chicle pegajoso (frena 1,4 s). Los de atrás reciben más turbos; los de delante, más chicles.

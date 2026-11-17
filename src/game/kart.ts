@@ -102,6 +102,10 @@ export class Kart {
   invulnT = 0;
   shrinkT = 0;
   fireT = 0;
+  /** Robotín: la mano telescópica está estirada (visual, en todos los dispositivos). */
+  reachT = 0;
+  /** Robotín: piernas telescópicas estiradas tras el jalón (visual). */
+  stretchT = 0;
   /** El Pisotón de Dino espera a aterrizar. */
   stompPending = false;
   /** Multiplicador de la duración de los golpes (perfil "Peque": menos de 1). */
@@ -157,7 +161,7 @@ export class Kart {
     this.drift = this.driftCharge = this.driftLevel = this.driftVisual = 0;
     this.boostT = this.startHold = this.wrongWayT = 0;
     this.item = null;
-    this.rouletteT = this.power = this.hitT = this.invulnT = this.shrinkT = this.fireT = 0;
+    this.rouletteT = this.power = this.hitT = this.invulnT = this.shrinkT = this.fireT = this.reachT = this.stretchT = 0;
     this.hitKind = '';
     this.stompPending = false;
     this.spinVisual = this.bubbleLift = 0;
