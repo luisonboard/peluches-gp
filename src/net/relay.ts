@@ -1,7 +1,10 @@
 // Salas a través del relevo WebSocket (/relay): funciona en cualquier red porque los dispositivos no se conectan
-// entre sí, sino al servidor que ya les sirve el juego. Misma interfaz que la conexión directa con PeerJS.
+// entre sí, sino al servidor que ya les sirve el juego. Por el mismo relevo se negocia además una conexión directa
+// WebRTC con cada invitado (channel.ts), que pasa a llevar los mensajes cuando es más rápida (por ejemplo, en la
+// misma red local); el relevo queda de respaldo. Misma interfaz que la conexión directa con PeerJS.
 import type { Msg } from './protocol';
 import { randomCode } from './net';
+import { Channel, type Path } from './channel';
 
 // El relevo está en el mismo servidor que el juego (Vite en desarrollo, el Worker publicado). VITE_RELAY_URL permite
 // usar otro al compilar.
@@ -37,11 +40,13 @@ export async function relayAvailable(): Promise<boolean> {
 export class RelayHost {
   code = '';
   private ws: WebSocket | null = null;
-  private guests = new Set<string>();
+  private guests = new Map<string, Channel>();
   onMsg: (from: string, m: Msg) => void = () => {};
   onJoin: (id: string) => void = () => {};
   onLeave: (id: string) => void = () => {};
   onError: (text: string) => void = () => {};
+  /** Cambió el camino con un invitado (relevo, directo, red local). */
+  onPath: (id: string, p: Path) => void = () => {};
 
   open(tries = 4): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -64,35 +69,60 @@ export class RelayHost {
           }
           return;
         }
-        if (d.op === 'join') {
-          this.guests.add(d.id);
-          this.onJoin(d.id);
-        } else if (d.op === 'leave') {
-          if (this.guests.delete(d.id)) this.onLeave(d.id);
-        } else if (d.op === 'from' && d.m && d.m.t !== 'ping') this.onMsg(d.id, d.m as Msg);
+        if (d.op === 'join') this.join(String(d.id));
+        else if (d.op === 'leave') this.guests.get(d.id)?.relayLost();
+        else if (d.op === 'from') this.guests.get(d.id)?.fromRelay(d.m);
       };
       ws.onerror = () => {
         if (!ready) reject(new Error('No se pudo conectar con el servidor de salas.'));
       };
       ws.onclose = () => {
-        if (ready && this.ws === ws) this.onError('Se cortó la conexión con el servidor de salas.');
+        if (!ready || this.ws !== ws) return;
+        this.ws = null;
+        // Los invitados con conexión directa siguen en la partida; los demás se pierden.
+        for (const c of [...this.guests.values()]) c.relayLost();
+        this.onError('Se cortó la conexión con el servidor de salas.');
       };
     });
   }
 
+  private join(id: string): void {
+    // Un dispositivo que vuelve a entrar con el mismo id (el mando al reconectarse) empieza un canal nuevo.
+    this.guests.get(id)?.close();
+    const c = new Channel(false, (w) => this.raw({ op: 'to', id, m: w }));
+    this.guests.set(id, c);
+    c.onMsg = (m) => this.onMsg(id, m);
+    c.onPath = (p) => this.onPath(id, p);
+    c.onDead = () => {
+      if (this.guests.get(id) !== c) return;
+      this.guests.delete(id);
+      this.onLeave(id);
+    };
+    this.onJoin(id);
+  }
+
+  private raw(o: unknown): void {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(o));
+  }
+
   send(id: string, m: Msg): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op: 'to', id, m }));
+    this.guests.get(id)?.send(m);
   }
 
   broadcast(m: Msg, except = ''): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op: 'all', m, except }));
+    for (const [id, c] of this.guests) if (id !== except) c.send(m);
+  }
+
+  path(id: string): Path | '' {
+    return this.guests.get(id)?.path ?? '';
   }
 
   close(): void {
     const ws = this.ws;
     this.ws = null;
-    ws?.close();
+    for (const c of this.guests.values()) c.close();
     this.guests.clear();
+    ws?.close();
   }
 }
 
@@ -100,8 +130,11 @@ export class RelayGuest {
   /** `id` fijo para volver a entrar como el mismo dispositivo (el teléfono-mando al reconectarse). */
   constructor(readonly id = `g${Math.random().toString(36).slice(2, 10)}`) {}
   private ws: WebSocket | null = null;
+  private ch: Channel | null = null;
   onMsg: (m: Msg) => void = () => {};
   onClose: (text: string) => void = () => {};
+  /** Cambió el camino con el anfitrión (relevo, directo, red local). */
+  onPath: (p: Path) => void = () => {};
 
   connect(code: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -121,6 +154,12 @@ export class RelayGuest {
           if (d.op === 'ok') {
             ready = true;
             this.ws = ws;
+            const c = (this.ch = new Channel(true, (w) => {
+              if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op: 'm', m: w }));
+            }));
+            c.onMsg = (m) => this.onMsg(m);
+            c.onPath = (p) => this.onPath(p);
+            c.onDead = () => this.lost('Se perdió la conexión con el anfitrión.');
             resolve();
           } else {
             ws.close();
@@ -128,25 +167,38 @@ export class RelayGuest {
           }
           return;
         }
-        if (d.op === 'm' && d.m && d.m.t !== 'ping') this.onMsg(d.m as Msg);
-        else if (d.op === 'gone') this.onClose('El anfitrión cerró la sala.');
+        if (d.op === 'm') this.ch?.fromRelay(d.m);
+        else if (d.op === 'gone') this.lost('El anfitrión cerró la sala.');
       };
       ws.onclose = () => {
-        if (ready && this.ws === ws) {
-          this.ws = null;
-          this.onClose('Se perdió la conexión con el anfitrión.');
-        }
+        if (!ready || this.ws !== ws) return;
+        this.ws = null;
+        // Con conexión directa la partida sigue; si no hay, el canal avisa de que se perdió.
+        this.ch?.relayLost();
       };
     });
   }
 
+  private lost(text: string): void {
+    if (!this.ch) return;
+    this.close();
+    this.onClose(text);
+  }
+
+  get path(): Path | '' {
+    return this.ch?.path ?? '';
+  }
+
   send(m: Msg): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op: 'm', m }));
+    this.ch?.send(m);
   }
 
   close(): void {
     const ws = this.ws;
     this.ws = null;
+    const c = this.ch;
+    this.ch = null;
+    c?.close();
     ws?.close();
   }
 }

@@ -1,8 +1,8 @@
 // Mensajes entre dispositivos. Topología en estrella: los invitados hablan con el anfitrión y él reenvía.
 import type { ItemId, Species } from '../core/events';
 
-/** 2: la sala y el inicio llevan la pista. 3: copa de 3 carreras. */
-export const PROTOCOL = 3;
+/** 2: la sala y el inicio llevan la pista. 3: copa de 3 carreras. 4: relevo con conexión directa (channel.ts). */
+export const PROTOCOL = 4;
 
 /** Copa en curso tal como viaja por la red (ver game/cup.ts). */
 export interface CupData {
@@ -88,8 +88,8 @@ export type Msg =
   /** Pantalla → teléfono: vibrar. */
   | { t: 'buzz'; ms: number };
 
-/** Versión del protocolo del mando (va en `padhi`). */
-export const PAD_PROTOCOL = 1;
+/** Versión del protocolo del mando (va en `padhi`). 2: relevo con conexión directa (channel.ts). */
+export const PAD_PROTOCOL = 2;
 /** `solo`/`unsolo`: usar (o dejar de usar) el teléfono como mando del jugador 1 en partidas de 1 jugador. */
 export type PadKey = 'left' | 'right' | 'up' | 'down' | 'ok' | 'back' | 'pause' | 'solo' | 'unsolo';
 

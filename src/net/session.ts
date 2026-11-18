@@ -8,6 +8,7 @@ import type { Race } from '../game/race';
 import type { Arena } from '../game/arena';
 import { NetHost, NetGuest, normalizeCode } from './net';
 import { RelayHost, RelayGuest, relayAvailable } from './relay';
+import type { Path } from './channel';
 import { MAX_PLAYERS, PROTOCOL, type CupData, type LobbyPlayer, type Msg, type RosterEntry } from './protocol';
 import { Cup } from '../game/cup';
 
@@ -44,7 +45,7 @@ export class Session {
   roster: RosterEntry[] = [];
   private host: NetHost | RelayHost | null = null;
   private guest: NetGuest | RelayGuest | null = null;
-  /** "relevo" si los mensajes pasan por el servidor del juego; "directa" con PeerJS. */
+  /** "relevo" si la sala está en el servidor del juego (con conexión directa cuando conviene); "directa" con PeerJS. */
   transport: 'relevo' | 'directa' = 'directa';
   private race: Race | null = null;
   private karts: Kart[] = [];
@@ -85,6 +86,7 @@ export class Session {
     h.onMsg = (from, m) => this.hostMsg(from, m);
     h.onLeave = (id) => this.hostLeave(id);
     h.onError = (t) => this.hooks.onNotice(t);
+    if (h instanceof RelayHost) h.onPath = () => this.pathChanged();
     this.hooks.onLobby();
   }
 
@@ -95,6 +97,7 @@ export class Session {
     const g = (this.guest = this.transport === 'relevo' ? new RelayGuest() : new NetGuest());
     g.onMsg = (m) => this.guestMsg(m);
     g.onClose = (t) => this.fail(t);
+    if (g instanceof RelayGuest) g.onPath = () => this.pathChanged();
     await g.connect(this.code);
     g.send({ t: 'hello', v: PROTOCOL, name, char });
   }
@@ -107,6 +110,21 @@ export class Session {
     this.arena.net = null;
     this.players = [];
     this.racing = false;
+  }
+
+  /**
+   * Por dónde van los mensajes con un jugador: `lan` (directo en la misma red), `directa` (directo por Internet) o
+   * `relevo` (por el servidor). En el anfitrión se pregunta por cada invitado; en un invitado, por el anfitrión.
+   */
+  pathOf(p: LobbyPlayer): Path | '' {
+    if (this.transport === 'directa') return p.host === this.isHost ? '' : 'directa';
+    if (this.host instanceof RelayHost) return p.peer ? this.host.path(p.peer) : '';
+    if (this.guest instanceof RelayGuest) return p.host ? this.guest.path : '';
+    return '';
+  }
+
+  private pathChanged(): void {
+    if (!this.racing) this.hooks.onLobby();
   }
 
   private fail(text: string): void {

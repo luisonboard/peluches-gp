@@ -84,6 +84,9 @@ function btn(text: string, cls: string, fn: () => void): HTMLButtonElement {
 }
 
 /** Menú: crear sala o escribir un código. */
+/** Cómo llegan los mensajes de ese jugador (ver Session.pathOf). */
+const PATH_LABEL: Record<string, string> = { '': '', lan: ' · 📶 red local', directa: ' · ⚡ directa', relevo: ' · ☁️ servidor' };
+
 export function showOnlineMenu(o: { code?: string; error?: string; busy?: string; onCreate: () => void; onJoin: (code: string) => void; onBack: () => void }): void {
   const card = screen();
   card.innerHTML = `<h2>Jugar con otros</h2><p class="hint">Cada uno en su teléfono, tablet o computador. Uno crea la sala y los demás escriben el código.</p>`;
@@ -147,7 +150,7 @@ export function showLobby(s: Session, h: { pick: (c: Species) => void; options: 
     const c = CHARACTERS.find((x) => x.id === p.char)!;
     const e = document.createElement('div');
     e.className = `pl${p.slot === s.me ? ' me' : ''}`;
-    e.innerHTML = `<span class="dot" style="background:${cssColor(c.color)}"></span><span class="nm">${escapeHtml(p.name)}<small>${p.host ? 'anfitrión' : p.waiting ? 'entra en la próxima' : 'invitado'}${p.slot === s.me ? ' · tú' : ''}</small></span>`;
+    e.innerHTML = `<span class="dot" style="background:${cssColor(c.color)}"></span><span class="nm">${escapeHtml(p.name)}<small>${p.host ? 'anfitrión' : p.waiting ? 'entra en la próxima' : 'invitado'}${p.slot === s.me ? ' · tú' : ''}${PATH_LABEL[s.pathOf(p)]}</small></span>`;
     pl.append(e);
   }
   const free = 6 - s.players.length;

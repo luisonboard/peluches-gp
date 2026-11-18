@@ -149,6 +149,13 @@ asfalto. Manteniendo la derecha o girando al azar: 0 choques. Giroscopio simulad
   tiene (el de desarrollo sí: `relay/rooms.mjs`), que funciona en cualquier red; si no, **conexión directa** con
   PeerJS 1.5.4 (WebRTC), que depende de que la red deje conectar los dispositivos entre sí (muchas Wi-Fi caseras no lo
   permiten). Topología en estrella: el anfitrión reenvía.
+- Con relevo, cada invitado (y cada teléfono-mando) negocia además por el mismo relevo una **conexión directa WebRTC**
+  con el anfitrión (`net/channel.ts`, `net/direct.ts`). Se mide el tiempo de ida y vuelta de los dos caminos cada
+  segundo y se usa el directo siempre que no sea claramente más lento (en la misma red local suele ir en pocos ms);
+  si el directo falla o se corta, se vuelve al relevo sin cortar la partida (y se reintenta hasta 4 veces), y si se
+  cae el relevo la partida sigue por el directo. Los mensajes fiables van numerados, así que cambiar de camino no los
+  desordena; el estado de los karts y los controles del mando van por un canal sin reenvíos (si se pierde uno, el
+  siguiente lo reemplaza). La sala de espera muestra por dónde va cada jugador: 📶 red local, ⚡ directa o ☁️ servidor.
 - Cada dispositivo simula su kart (sin retraso al manejar) y envía su estado 20 veces por segundo; los demás karts se
   predicen con su última velocidad y se suavizan. El anfitrión simula la IA y decide los puestos de llegada.
 - Objetos y poderes en red: quien los usa avisa a todos (con el objetivo ya elegido) y cada dispositivo decide los
