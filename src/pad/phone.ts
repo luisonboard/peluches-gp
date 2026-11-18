@@ -12,8 +12,6 @@ import { ITEM_ICONS } from '../ui/icons';
 import type { ItemId } from '../core/events';
 import { installErrorHooks } from '../core/events';
 
-installErrorHooks();
-
 const CSS = `
 #pad { position: fixed; inset: 0; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
   max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); box-sizing: border-box; text-align: center; overflow: auto; }
@@ -56,301 +54,305 @@ const CSS = `
 #padhud .pow.ready { box-shadow: 0 0 0 4px #ffd23a; }
 `;
 
-const code = normalizeCode(new URLSearchParams(location.search).get('mando') ?? '');
-const STEER_KEY = 'pgp.pad.steer';
-const ID_KEY = 'pgp.pad.id';
-const SEND_MS = 33;
+/** Arranca el mando (lo llama entry.ts). */
+export function startPhone(): void {
+  installErrorHooks();
+  const code = normalizeCode(new URLSearchParams(location.search).get('mando') ?? '');
+  const STEER_KEY = 'pgp.pad.steer';
+  const ID_KEY = 'pgp.pad.id';
+  const SEND_MS = 33;
 
-const store = {
-  get(k: string): string | null {
-    try {
-      return localStorage.getItem(k);
-    } catch {
-      return null;
-    }
-  },
-  set(k: string, v: string): void {
-    try {
-      localStorage.setItem(k, v);
-    } catch {
-      /* sin almacenamiento */
-    }
-  },
-};
-/** Id fijo por pestaña: si se corta y se vuelve a conectar, la pantalla lo reconoce como el mismo mando. */
-function stableId(): string {
-  try {
-    let id = sessionStorage.getItem(ID_KEY);
-    if (!id) sessionStorage.setItem(ID_KEY, (id = `m${Math.random().toString(36).slice(2, 10)}`));
-    return id;
-  } catch {
-    return `m${Math.random().toString(36).slice(2, 10)}`;
-  }
-}
-
-const st = document.createElement('style');
-st.textContent = CSS;
-document.head.append(st);
-document.title = 'Mando · Peluches GP';
-const root = document.createElement('div');
-root.id = 'pad';
-const hudEl = document.createElement('div');
-hudEl.id = 'padhud';
-document.body.append(root, hudEl);
-document.getElementById('app')?.remove();
-
-const saved = loadSettings();
-const gyro = new Gyro();
-gyro.sens = saved.gyroSens;
-gyro.invert = saved.gyroInvert;
-let steerMode: SteerMode = store.get(STEER_KEY) === 'botones' ? 'botones' : 'giro';
-const touch = new TouchControls(gyro, () => sendKey('pause'));
-
-let conn: RelayGuest | NetGuest | null = null;
-let state: PadState | null = null;
-let hud: PadHud | null = null;
-let error = '';
-let connecting = false;
-
-const el = (tag: string, cls = '', html = ''): HTMLElement => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (html) e.innerHTML = html;
-  return e;
-};
-const btn = (cls: string, html: string, on: () => void): HTMLElement => {
-  const b = el('button', cls, html);
-  b.addEventListener('click', on);
-  return b;
-};
-
-function send(m: Msg): void {
-  conn?.send(m);
-}
-function sendKey(k: PadKey): void {
-  send({ t: 'pkey', k });
-  navigator.vibrate?.(12);
-}
-
-// ---------------- Conexión ----------------
-
-async function connect(): Promise<void> {
-  if (connecting) return;
-  connecting = true;
-  error = '';
-  render();
-  // Lo que exige un toque: giroscopio (iPhone), pantalla encendida, pantalla completa.
-  if (steerMode === 'giro' && !gyro.active) await gyro.enable();
-  void keepAwake();
-  const de = document.documentElement;
-  if (!document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().catch(() => {});
-  try {
-    const g = (await relayAvailable()) ? new RelayGuest(stableId()) : new NetGuest();
-    g.onMsg = onMsg;
-    g.onClose = (t) => {
-      conn = null;
-      state = null;
-      error = t;
-      touch.show(false);
-      render();
-    };
-    await g.connect(code);
-    conn = g;
-    g.send({ t: 'padhi', v: PAD_PROTOCOL });
-    setTimeout(() => {
-      if (conn === g && !state) {
-        error = 'Se encontró la sala, pero no responde como una pantalla de Peluches GP. Revisa el código.';
-        g.close();
-        conn = null;
-        render();
+  const store = {
+    get(k: string): string | null {
+      try {
+        return localStorage.getItem(k);
+      } catch {
+        return null;
       }
-    }, 4000);
-  } catch (e) {
-    const msg = (e as Error).message;
-    error = /No existe/.test(msg) ? 'No hay ninguna pantalla con ese código. En el computador, abre «2 jugadores» y vuelve a escanear el QR.' : msg;
-  }
-  connecting = false;
-  render();
-}
-
-let wake: { release(): Promise<void> } | null = null;
-async function keepAwake(): Promise<void> {
-  try {
-    const wl = (navigator as Navigator & { wakeLock?: { request(t: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock;
-    if (wl && !wake) {
-      wake = await wl.request('screen');
-      (wake as unknown as EventTarget).addEventListener?.('release', () => (wake = null));
+    },
+    set(k: string, v: string): void {
+      try {
+        localStorage.setItem(k, v);
+      } catch {
+        /* sin almacenamiento */
+      }
+    },
+  };
+  /** Id fijo por pestaña: si se corta y se vuelve a conectar, la pantalla lo reconoce como el mismo mando. */
+  function stableId(): string {
+    try {
+      let id = sessionStorage.getItem(ID_KEY);
+      if (!id) sessionStorage.setItem(ID_KEY, (id = `m${Math.random().toString(36).slice(2, 10)}`));
+      return id;
+    } catch {
+      return `m${Math.random().toString(36).slice(2, 10)}`;
     }
-  } catch {
-    /* sin permiso: la pantalla puede apagarse */
   }
-}
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && conn) void keepAwake();
-});
 
-function onMsg(m: Msg): void {
-  if (m.t === 'padst') {
-    const before = state;
-    state = m.st;
-    if (state.mode === 'reject') {
-      error = state.note ?? 'No se pudo usar este teléfono como mando.';
-      conn?.close();
-      conn = null;
-      state = null;
-    }
-    const was = before?.mode === 'race';
-    const now = state?.mode === 'race';
-    if (now && (!was || before?.auto !== state!.auto || before?.peque !== state!.peque)) configureTouch();
-    if (now && !was) setTimeout(() => gyro.calibrate(), 600);
-    if (!now) hud = null;
+  const st = document.createElement('style');
+  st.textContent = CSS;
+  document.head.append(st);
+  document.title = 'Mando · Peluches GP';
+  const root = document.createElement('div');
+  root.id = 'pad';
+  const hudEl = document.createElement('div');
+  hudEl.id = 'padhud';
+  document.body.append(root, hudEl);
+  document.getElementById('app')?.remove();
+
+  const saved = loadSettings();
+  const gyro = new Gyro();
+  gyro.sens = saved.gyroSens;
+  gyro.invert = saved.gyroInvert;
+  let steerMode: SteerMode = store.get(STEER_KEY) === 'botones' ? 'botones' : 'giro';
+  const touch = new TouchControls(gyro, () => sendKey('pause'));
+
+  let conn: RelayGuest | NetGuest | null = null;
+  let state: PadState | null = null;
+  let hud: PadHud | null = null;
+  let error = '';
+  let connecting = false;
+
+  const el = (tag: string, cls = '', html = ''): HTMLElement => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html) e.innerHTML = html;
+    return e;
+  };
+  const btn = (cls: string, html: string, on: () => void): HTMLElement => {
+    const b = el('button', cls, html);
+    b.addEventListener('click', on);
+    return b;
+  };
+
+  function send(m: Msg): void {
+    conn?.send(m);
+  }
+  function sendKey(k: PadKey): void {
+    send({ t: 'pkey', k });
+    navigator.vibrate?.(12);
+  }
+
+  // ---------------- Conexión ----------------
+
+  async function connect(): Promise<void> {
+    if (connecting) return;
+    connecting = true;
+    error = '';
     render();
-  } else if (m.t === 'padhud') {
-    hud = m.h;
-    renderHud();
-  } else if (m.t === 'buzz') navigator.vibrate?.(m.ms);
-}
-
-function configureTouch(): void {
-  const s: Settings = { ...defaultSettings(), steerMode: gyro.active ? steerMode : 'botones', autoAccel: !!state?.auto, profile: state?.peque ? 'peque' : 'normal' };
-  touch.configure(s);
-}
-
-// ---------------- Envío de controles ----------------
-
-let last = performance.now();
-let sentAt = 0;
-function frame(now: number): void {
-  const dt = Math.min(0.1, (now - last) / 1000);
-  last = now;
-  if (state?.mode === 'race') {
-    const c: Controls = { steer: 0, throttle: 0, brake: 0, drift: false, item: false, power: false, look: false };
-    touch.merge(c, dt, (hud?.pow ?? 0) >= 1);
-    if (now - sentAt >= SEND_MS) {
-      sentAt = now;
-      const bits = (c.drift ? 1 : 0) | (c.item ? 2 : 0) | (c.power ? 4 : 0) | (c.look ? 8 : 0);
-      send({ t: 'pad', c: [Math.round(c.steer * 100) / 100, c.throttle, c.brake, bits] });
+    // Lo que exige un toque: giroscopio (iPhone), pantalla encendida, pantalla completa.
+    if (steerMode === 'giro' && !gyro.active) await gyro.enable();
+    void keepAwake();
+    const de = document.documentElement;
+    if (!document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().catch(() => {});
+    try {
+      const g = (await relayAvailable()) ? new RelayGuest(stableId()) : new NetGuest();
+      g.onMsg = onMsg;
+      g.onClose = (t) => {
+        conn = null;
+        state = null;
+        error = t;
+        touch.show(false);
+        render();
+      };
+      await g.connect(code);
+      conn = g;
+      g.send({ t: 'padhi', v: PAD_PROTOCOL });
+      setTimeout(() => {
+        if (conn === g && !state) {
+          error = 'Se encontró la sala, pero no responde como una pantalla de Peluches GP. Revisa el código.';
+          g.close();
+          conn = null;
+          render();
+        }
+      }, 4000);
+    } catch (e) {
+      const msg = (e as Error).message;
+      error = /No existe/.test(msg) ? 'No hay ninguna pantalla con ese código. En el computador, abre «2 jugadores» y vuelve a escanear el QR.' : msg;
     }
+    connecting = false;
+    render();
+  }
+
+  let wake: { release(): Promise<void> } | null = null;
+  async function keepAwake(): Promise<void> {
+    try {
+      const wl = (navigator as Navigator & { wakeLock?: { request(t: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock;
+      if (wl && !wake) {
+        wake = await wl.request('screen');
+        (wake as unknown as EventTarget).addEventListener?.('release', () => (wake = null));
+      }
+    } catch {
+      /* sin permiso: la pantalla puede apagarse */
+    }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && conn) void keepAwake();
+  });
+
+  function onMsg(m: Msg): void {
+    if (m.t === 'padst') {
+      const before = state;
+      state = m.st;
+      if (state.mode === 'reject') {
+        error = state.note ?? 'No se pudo usar este teléfono como mando.';
+        conn?.close();
+        conn = null;
+        state = null;
+      }
+      const was = before?.mode === 'race';
+      const now = state?.mode === 'race';
+      if (now && (!was || before?.auto !== state!.auto || before?.peque !== state!.peque)) configureTouch();
+      if (now && !was) setTimeout(() => gyro.calibrate(), 600);
+      if (!now) hud = null;
+      render();
+    } else if (m.t === 'padhud') {
+      hud = m.h;
+      renderHud();
+    } else if (m.t === 'buzz') navigator.vibrate?.(m.ms);
+  }
+
+  function configureTouch(): void {
+    const s: Settings = { ...defaultSettings(), steerMode: gyro.active ? steerMode : 'botones', autoAccel: !!state?.auto, profile: state?.peque ? 'peque' : 'normal' };
+    touch.configure(s);
+  }
+
+  // ---------------- Envío de controles ----------------
+
+  let last = performance.now();
+  let sentAt = 0;
+  function frame(now: number): void {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (state?.mode === 'race') {
+      const c: Controls = { steer: 0, throttle: 0, brake: 0, drift: false, item: false, power: false, look: false };
+      touch.merge(c, dt, (hud?.pow ?? 0) >= 1);
+      if (now - sentAt >= SEND_MS) {
+        sentAt = now;
+        const bits = (c.drift ? 1 : 0) | (c.item ? 2 : 0) | (c.power ? 4 : 0) | (c.look ? 8 : 0);
+        send({ t: 'pad', c: [Math.round(c.steer * 100) / 100, c.throttle, c.brake, bits] });
+      }
+    }
+    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
 
-// ---------------- Pantallas ----------------
+  // ---------------- Pantallas ----------------
 
-function steerOpts(): HTMLElement {
-  const o = el('div', 'opts', 'Volante:');
-  for (const [m, label] of [['giro', 'Girar el teléfono'], ['botones', 'Botones ◀ ▶']] as [SteerMode, string][]) {
-    o.append(
-      btn(`opt${steerMode === m ? ' sel' : ''}`, label, () => {
-        steerMode = m;
-        store.set(STEER_KEY, m);
-        if (m === 'giro' && !gyro.active) void gyro.enable().then(() => (configureTouch(), render()));
-        else if (state?.mode === 'race') configureTouch();
-        render();
-      }),
-    );
+  function steerOpts(): HTMLElement {
+    const o = el('div', 'opts', 'Volante:');
+    for (const [m, label] of [['giro', 'Girar el teléfono'], ['botones', 'Botones ◀ ▶']] as [SteerMode, string][]) {
+      o.append(
+        btn(`opt${steerMode === m ? ' sel' : ''}`, label, () => {
+          steerMode = m;
+          store.set(STEER_KEY, m);
+          if (m === 'giro' && !gyro.active) void gyro.enable().then(() => (configureTouch(), render()));
+          else if (state?.mode === 'race') configureTouch();
+          render();
+        }),
+      );
+    }
+    return o;
   }
-  return o;
-}
 
-function tag(): HTMLElement {
-  const t = el('div', 'tag stroke');
-  if (state && state.who >= 0) {
-    t.textContent = `Jugador ${state.who + 1}${state.name ? ` · ${state.name}` : ''}`;
-    t.style.color = state.color ?? '#fff';
-  } else t.textContent = state?.label ?? '';
-  return t;
-}
+  function tag(): HTMLElement {
+    const t = el('div', 'tag stroke');
+    if (state && state.who >= 0) {
+      t.textContent = `Jugador ${state.who + 1}${state.name ? ` · ${state.name}` : ''}`;
+      t.style.color = state.color ?? '#fff';
+    } else t.textContent = state?.label ?? '';
+    return t;
+  }
 
-/** Flechas y OK. `labels`: textos pequeños debajo de cada flecha. */
-function dpad(labels: Partial<Record<PadKey, string>> = {}, okText = 'OK'): HTMLElement {
-  const g = el('div', 'dpad');
-  const cell = (k: PadKey | '', html: string, cls = 'k'): void => {
-    if (!k) {
-      g.append(el('div'));
+  /** Flechas y OK. `labels`: textos pequeños debajo de cada flecha. */
+  function dpad(labels: Partial<Record<PadKey, string>> = {}, okText = 'OK'): HTMLElement {
+    const g = el('div', 'dpad');
+    const cell = (k: PadKey | '', html: string, cls = 'k'): void => {
+      if (!k) {
+        g.append(el('div'));
+        return;
+      }
+      const b = el('button', cls, `${html}${labels[k] ? `<small>${labels[k]}</small>` : ''}`);
+      b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        sendKey(k);
+      });
+      g.append(b);
+    };
+    cell('', '');
+    cell('up', '▲');
+    cell('', '');
+    cell('left', '◀');
+    cell('ok', okText, 'k ok');
+    cell('right', '▶');
+    cell('', '');
+    cell('down', '▼');
+    cell('', '');
+    return g;
+  }
+
+  function render(): void {
+    root.replaceChildren();
+    const box = el('div', 'box');
+    root.append(box);
+    const racing = state?.mode === 'race';
+    touch.show(!!racing);
+    root.style.display = racing ? 'none' : '';
+    hudEl.style.display = racing ? 'flex' : 'none';
+    if (racing) return renderHud();
+
+    if (!code) {
+      box.append(el('h1', 'stroke', '📱 Mando'), el('div', 'note', 'Falta el código de la pantalla. Escanea el QR que aparece en el computador, en «2 jugadores».'));
       return;
     }
-    const b = el('button', cls, `${html}${labels[k] ? `<small>${labels[k]}</small>` : ''}`);
-    b.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      sendKey(k);
-    });
-    g.append(b);
-  };
-  cell('', '');
-  cell('up', '▲');
-  cell('', '');
-  cell('left', '◀');
-  cell('ok', okText, 'k ok');
-  cell('right', '▶');
-  cell('', '');
-  cell('down', '▼');
-  cell('', '');
-  return g;
-}
-
-function render(): void {
-  root.replaceChildren();
-  const box = el('div', 'box');
-  root.append(box);
-  const racing = state?.mode === 'race';
-  touch.show(!!racing);
-  root.style.display = racing ? 'none' : '';
-  hudEl.style.display = racing ? 'flex' : 'none';
-  if (racing) return renderHud();
-
-  if (!code) {
-    box.append(el('h1', 'stroke', '📱 Mando'), el('div', 'note', 'Falta el código de la pantalla. Escanea el QR que aparece en el computador, en «2 jugadores».'));
-    return;
-  }
-  if (!state) {
-    box.append(el('h1', 'stroke', '📱 Mando de Peluches GP'), el('div', 'sub', `Pantalla ${code}`));
-    if (error) box.append(el('div', 'note', `⚠️ ${error}`));
-    box.append(btn('go', connecting ? 'Conectando…' : error ? 'Reintentar' : '¡Conectar!', () => void connect()));
-    if (!window.isSecureContext) box.append(el('div', 'note', 'Esta dirección no es segura (https): el giroscopio no funciona y se usarán botones.'));
-    else box.append(steerOpts());
-    box.append(el('div', 'sub', 'La carrera se ve en la pantalla grande. Aquí solo manejas.'));
-    return;
-  }
-  box.append(tag());
-  if (state.mode === 'join') {
-    if (state.who < 0) {
-      box.append(el('div', 'sub', 'Pantalla de 2 jugadores'), btn('go', '¡Unirme!', () => sendKey('ok')));
-    } else {
-      box.append(
-        el('div', 'sub', state.ready ? '¡Listo! Esperando al otro jugador…' : 'Elige tu peluche y tu perfil'),
-        el('div', 'menuwrap'),
-      );
-      const w = box.lastElementChild!;
-      w.append(dpad({ left: 'peluche', right: 'peluche', up: 'perfil', down: 'perfil' }, '¡Listo!'));
-      box.append(btn('go alt', state.ready ? 'Cambiar' : 'Salir', () => sendKey('back')));
+    if (!state) {
+      box.append(el('h1', 'stroke', '📱 Mando de Peluches GP'), el('div', 'sub', `Pantalla ${code}`));
+      if (error) box.append(el('div', 'note', `⚠️ ${error}`));
+      box.append(btn('go', connecting ? 'Conectando…' : error ? 'Reintentar' : '¡Conectar!', () => void connect()));
+      if (!window.isSecureContext) box.append(el('div', 'note', 'Esta dirección no es segura (https): el giroscopio no funciona y se usarán botones.'));
+      else box.append(steerOpts());
+      box.append(el('div', 'sub', 'La carrera se ve en la pantalla grande. Aquí solo manejas.'));
+      return;
     }
-  } else if (state.mode === 'wait') {
-    box.append(el('div', 'note', state.note ?? 'Esta carrera ya empezó sin este teléfono. Entras en la siguiente.'), dpad());
-  } else {
-    box.append(el('div', 'sub', state.note ?? 'Muévete por el menú de la pantalla'), dpad(), btn('go alt', 'Atrás', () => sendKey('back')));
+    box.append(tag());
+    if (state.mode === 'join') {
+      if (state.who < 0) {
+        box.append(el('div', 'sub', 'Pantalla de 2 jugadores'), btn('go', '¡Unirme!', () => sendKey('ok')));
+      } else {
+        box.append(
+          el('div', 'sub', state.ready ? '¡Listo! Esperando al otro jugador…' : 'Elige tu peluche y tu perfil'),
+          el('div', 'menuwrap'),
+        );
+        const w = box.lastElementChild!;
+        w.append(dpad({ left: 'peluche', right: 'peluche', up: 'perfil', down: 'perfil' }, '¡Listo!'));
+        box.append(btn('go alt', state.ready ? 'Cambiar' : 'Salir', () => sendKey('back')));
+      }
+    } else if (state.mode === 'wait') {
+      box.append(el('div', 'note', state.note ?? 'Esta carrera ya empezó sin este teléfono. Entras en la siguiente.'), dpad());
+    } else {
+      box.append(el('div', 'sub', state.note ?? 'Muévete por el menú de la pantalla'), dpad(), btn('go alt', 'Atrás', () => sendKey('back')));
+    }
+    box.append(steerOpts());
+    if (steerMode === 'giro' && !gyro.active && gyro.permission !== 'desconocido')
+      box.append(el('div', 'note', 'El giroscopio no está disponible: se usarán los botones ◀ ▶.'));
   }
-  box.append(steerOpts());
-  if (steerMode === 'giro' && !gyro.active && gyro.permission !== 'desconocido')
-    box.append(el('div', 'note', 'El giroscopio no está disponible: se usarán los botones ◀ ▶.'));
-}
 
-const ordinal = (n: number): string => `${n}<small>º</small>`;
-function renderHud(): void {
-  if (state?.mode !== 'race') return;
-  const h = hud;
-  hudEl.replaceChildren();
-  const pos = el('div', 'pos stroke', h ? ordinal(h.pos) : '');
-  pos.style.color = state.color ?? '#fff';
-  const lap = el('div', 'lap stroke', h ? (h.fin ? '¡Meta!' : `Vuelta ${Math.max(1, h.lap)}/${h.laps}`) : 'Mira la pantalla');
-  const pw = el('div', `pow${h && h.pow >= 1 ? ' ready' : ''}`);
-  const fill = el('div');
-  fill.style.width = `${Math.round((h?.pow ?? 0) * 100)}%`;
-  pw.append(fill);
-  lap.append(pw);
-  const slot = el('div', `slot${h?.roul ? ' spin' : ''}`, h?.roul ? ITEM_ICONS.pelota : h?.item ? ITEM_ICONS[h.item as ItemId] ?? '' : '');
-  hudEl.append(pos, lap, slot);
-}
+  const ordinal = (n: number): string => `${n}<small>º</small>`;
+  function renderHud(): void {
+    if (state?.mode !== 'race') return;
+    const h = hud;
+    hudEl.replaceChildren();
+    const pos = el('div', 'pos stroke', h ? ordinal(h.pos) : '');
+    pos.style.color = state.color ?? '#fff';
+    const lap = el('div', 'lap stroke', h ? (h.fin ? '¡Meta!' : `Vuelta ${Math.max(1, h.lap)}/${h.laps}`) : 'Mira la pantalla');
+    const pw = el('div', `pow${h && h.pow >= 1 ? ' ready' : ''}`);
+    const fill = el('div');
+    fill.style.width = `${Math.round((h?.pow ?? 0) * 100)}%`;
+    pw.append(fill);
+    lap.append(pw);
+    const slot = el('div', `slot${h?.roul ? ' spin' : ''}`, h?.roul ? ITEM_ICONS.pelota : h?.item ? ITEM_ICONS[h.item as ItemId] ?? '' : '');
+    hudEl.append(pos, lap, slot);
+  }
 
-render();
+  render();
+}
