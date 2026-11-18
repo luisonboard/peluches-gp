@@ -105,7 +105,7 @@ export function startPhone(): void {
   gyro.sens = saved.gyroSens;
   gyro.invert = saved.gyroInvert;
   let steerMode: SteerMode = store.get(STEER_KEY) === 'botones' ? 'botones' : 'giro';
-  const touch = new TouchControls(gyro, () => sendKey('pause'));
+  const touch = new TouchControls(gyro, () => sendKey('pause'), true);
 
   let conn: RelayGuest | NetGuest | null = null;
   let state: PadState | null = null;

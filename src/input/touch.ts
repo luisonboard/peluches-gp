@@ -17,9 +17,9 @@ const CSS = `
 #pgp-touch .tb.on { background: rgba(255,210,58,0.65); transform: scale(0.94); }
 #pgp-touch .tb.ready { border-color: #ffd23a; animation: pgp-tready .5s ease-in-out infinite alternate; }
 @keyframes pgp-tready { to { box-shadow: 0 0 0 8px rgba(255,210,58,.7) } }
-#pgp-touch .wheel { position: absolute; pointer-events: none; width: 84px; height: 84px; border-radius: 50%; border: 7px solid rgba(255,255,255,0.85);
-  box-shadow: 0 0 0 3px rgba(42,32,80,0.5); }
-#pgp-touch .wheel::before { content: ""; position: absolute; left: 50%; top: 4px; bottom: 50%; width: 8px; margin-left: -4px; border-radius: 4px; background: #ffd23a; }
+#pgp-touch .wheel { position: absolute; pointer-events: none; width: 44px; height: 44px; border-radius: 50%; border: 5px solid rgba(255,255,255,0.85);
+  box-shadow: 0 0 0 2px rgba(42,32,80,0.5); }
+#pgp-touch .wheel::before { content: ""; position: absolute; left: 50%; top: 2px; bottom: 50%; width: 6px; margin-left: -3px; border-radius: 3px; background: #ffd23a; }
 #pgp-rotate { position: fixed; inset: 0; z-index: 30; display: none; place-items: center; text-align: center; background: #5d6ab0; color: #fff;
   font: 900 26px/1.3 ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif; padding: 24px; }
 #pgp-rotate .big { font-size: 80px; display: block; animation: pgp-rot 1.6s ease-in-out infinite; }
@@ -43,7 +43,8 @@ export class TouchControls {
   private visible = false;
   private settings: Settings | null = null;
 
-  constructor(private gyro: Gyro, private onPause: () => void) {
+  /** `pad`: el teléfono es el mando de la pantalla dividida (sin juego detrás), así que los botones crecen. */
+  constructor(private gyro: Gyro, private onPause: () => void, private pad = false) {
     const st = document.createElement('style');
     st.textContent = CSS;
     document.head.append(st);
@@ -87,23 +88,23 @@ export class TouchControls {
     };
     const peque = s.profile === 'peque';
     const giro = s.steerMode === 'giro';
+    // Objeto y Poder (o ¡Usar!) grandes, y aún más en el teléfono usado como mando, donde no hay juego detrás que tapar.
+    const big = (icon: string, text: string, size: number): string =>
+      `<span style="font-size:${Math.max(15, Math.round(size * 0.16))}px"><span class="ic" style="font-size:${Math.round(size * 0.36)}px">${icon}</span>${text}</span>`;
+    const itemSz = this.pad ? 132 : giro ? 100 : 92;
+    const useSz = this.pad ? 150 : giro ? 116 : 108;
     // Con giroscopio la izquierda queda libre de ◀ ▶: Objeto y Poder pasan a la esquina izquierda (lo siguiente
-    // en uso tras acelerar y frenar), con el indicador del volante a su lado y Centrar, mirar atrás y pausa encima.
+    // en uso tras acelerar y frenar), con Centrar, mirar atrás, pausa y un indicador pequeño del volante encima.
+    let rowL = 96;
     if (giro) {
-      let wheelX = 0;
       if (peque) {
-        mk('use', '<span><span class="ic">⭐</span>¡Usar!</span>', 96, { left: L, bottom: B });
-        wheelX = 110;
+        mk('use', big('⭐', '¡Usar!', useSz), useSz, { left: L, bottom: B });
+        rowL = useSz;
       } else {
-        mk('item', '<span><span class="ic">🎁</span>Objeto</span>', 80, { left: L, bottom: B });
-        mk('power', '<span><span class="ic">⚡</span>Poder</span>', 80, { left: `calc(${L} + 92px)`, bottom: B });
-        wheelX = 186;
+        mk('item', big('🎁', 'Objeto', itemSz), itemSz, { left: L, bottom: B });
+        mk('power', big('⚡', 'Poder', itemSz), itemSz, { left: `calc(${L} + ${itemSz + 12}px)`, bottom: B });
+        rowL = itemSz;
       }
-      const w = document.createElement('div');
-      w.className = 'wheel';
-      Object.assign(w.style, { left: `calc(${L} + ${wheelX}px)`, bottom: B });
-      this.root.append(w);
-      this.wheel = w;
     } else {
       mk('left', '<span class="ic">◀</span>', 96, { left: L, bottom: B });
       mk('right', '<span class="ic">▶</span>', 96, { left: `calc(${L} + 110px)`, bottom: B });
@@ -118,14 +119,16 @@ export class TouchControls {
     if (!giro) {
       const up = `calc(${B} + ${gas ? 116 : 100}px)`;
       if (peque) {
-        mk('use', '<span><span class="ic">⭐</span>¡Usar!</span>', 96, { right: `calc(${R} + ${gas ? 50 : 0}px)`, bottom: up });
+        mk('use', big('⭐', '¡Usar!', useSz), useSz, { right: `calc(${R} + ${gas ? 40 : 0}px)`, bottom: up });
       } else {
-        mk('power', '<span><span class="ic">⚡</span>Poder</span>', 80, { right: `calc(${R} + ${gas ? 10 : 2}px)`, bottom: up });
-        mk('item', '<span><span class="ic">🎁</span>Objeto</span>', 80, { right: `calc(${R} + ${gas ? 100 : 92}px)`, bottom: up });
+        const off = gas ? 4 : 0;
+        mk('power', big('⚡', 'Poder', itemSz), itemSz, { right: `calc(${R} + ${off}px)`, bottom: up });
+        mk('item', big('🎁', 'Objeto', itemSz), itemSz, { right: `calc(${R} + ${off + itemSz + 12}px)`, bottom: up });
       }
     }
-    // Izquierda, encima de lo de abajo: (Centrar con giroscopio), mirar atrás y pausa.
-    const upL = `calc(${B} + ${giro ? (peque ? 110 : 94) : 112}px)`;
+    // Izquierda, encima de lo de abajo: (Centrar con giroscopio), mirar atrás, pausa y (el indicador del volante,
+    // pequeño y al final porque no se toca).
+    const upL = `calc(${B} + ${rowL + (giro ? 14 : 16)}px)`;
     let x = 0;
     if (giro) {
       mk('center', '<span><span class="ic" style="font-size:22px">⟲</span>Centrar</span>', 64, { left: L, bottom: upL });
@@ -133,6 +136,13 @@ export class TouchControls {
     }
     mk('look', '<span class="ic" style="font-size:24px">👀</span>', 56, { left: `calc(${L} + ${x}px)`, bottom: upL });
     mk('pause', '<span class="ic" style="font-size:22px">❚❚</span>', 56, { left: `calc(${L} + ${x + 68}px)`, bottom: upL });
+    if (giro) {
+      const w = document.createElement('div');
+      w.className = 'wheel';
+      Object.assign(w.style, { left: `calc(${L} + ${x + 136}px)`, bottom: `calc(${B} + ${rowL + 20}px)` });
+      this.root.append(w);
+      this.wheel = w;
+    }
   }
 
   show(v: boolean): void {
