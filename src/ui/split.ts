@@ -1,7 +1,7 @@
 // Pantalla dividida: "Pulsa un botón para unirte". Cada jugador se une con su dispositivo (teclado o mando) y con
 // ese mismo dispositivo elige peluche (◀ ▶), perfil (▲ ▼) y dice "listo" (B / Enter). Con los dos listos, empieza.
 // Un teléfono también sirve de mando: se escanea el QR y se pulsa «¡Unirme!» en él (ver net/pad.ts y pad/phone.ts).
-import qrcode from 'qrcode-generator';
+import { phoneQrBox, watchPhoneUrl } from './phoneQr';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
 import type { DeviceId, MenuEvent } from '../input/input';
 import type { Profile } from '../core/settings';
@@ -52,12 +52,6 @@ const CSS = `
 .pgp-split .btns .pgp-go { margin: 0; font-size: 22px; padding: 12px 30px; }
 .pgp-split .btns .alt { background: #2f7de0; box-shadow: 0 7px 0 #1d5aa8; }
 .pgp-split .pgp-go:disabled { opacity: .45; cursor: default; }
-.pgp-split .phone { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 12px; background: #f1effa; border-radius: 18px; padding: 8px 12px; }
-.pgp-split .phone .qr { width: 104px; height: 104px; background: #fff; border-radius: 10px; padding: 3px; box-sizing: border-box; flex: none; }
-.pgp-split .phone .qr svg { width: 100%; height: 100%; display: block; }
-.pgp-split .phone .txt { font-size: 14px; font-weight: 800; color: #6a64a0; text-align: left; max-width: 340px; }
-.pgp-split .phone .txt b { color: #2a2050; font-size: 17px; display: block; }
-.pgp-split .phone .code { font-size: 22px; letter-spacing: 3px; color: #2a2050; font-weight: 900; }
 @media (max-height: 520px) {
   .pgp-split h2 { font-size: 22px; }
   .pgp-split .sum { margin-bottom: 6px; font-size: 13px; }
@@ -66,8 +60,6 @@ const CSS = `
   .pgp-split .face::before, .pgp-split .face::after { top: 13px; width: 8px; height: 9px; }
   .pgp-split .face::before { left: 8px } .pgp-split .face::after { right: 8px }
   .pgp-split .btns { margin-top: 8px; }
-  .pgp-split .phone { margin-top: 6px; padding: 4px 10px; }
-  .pgp-split .phone .qr { width: 72px; height: 72px; }
   .pgp-split .btns .pgp-go { font-size: 17px; padding: 8px 18px; }
 }
 `;
@@ -147,36 +139,7 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
     if (text) e.textContent = text;
     return e;
   };
-  let phone: { url: string; code: string } | null = null;
-  let phoneErr = '';
-  d.phoneUrl.then(
-    (p) => {
-      phone = p;
-      if (!closed) render();
-    },
-    () => {
-      phoneErr = 'No se pudo abrir la conexión para los teléfonos (revisa que haya Internet).';
-      if (!closed) render();
-    },
-  );
-  const phoneBox = (): HTMLElement => {
-    const box = el('div', 'phone');
-    const txt = el('div', 'txt');
-    if (phone) {
-      const qr = qrcode(0, 'M');
-      qr.addData(phone.url);
-      qr.make();
-      const q = el('div', 'qr');
-      q.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 1, scalable: true });
-      box.append(q);
-      txt.append(el('b', '', '📱 ¿Sin mando? Usa un teléfono'), document.createTextNode('Escanea el QR y toca «¡Unirme!» en el teléfono.'), el('div', '', 'Código: '));
-      txt.lastElementChild!.append(el('span', 'code', phone.code));
-      if (/^(localhost|127\.|\[::1\])/.test(location.hostname))
-        txt.append(el('div', '', '⚠️ Esta dirección solo funciona en este computador: abre el juego con npm run dev:lan o desde la dirección publicada.'));
-    } else txt.append(el('b', '', '📱 Teléfono como mando'), document.createTextNode(phoneErr || 'Preparando el código…'));
-    box.append(txt);
-    return box;
-  };
+  const phone = watchPhoneUrl(d.phoneUrl, () => !closed && render());
   const render = (): void => {
     card.replaceChildren();
     card.append(el('h2', '', '👥 2 jugadores'), el('div', 'sum', d.summary));
@@ -216,7 +179,7 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
       cols.append(col);
     });
     card.append(cols);
-    if (!both()) card.append(phoneBox());
+    if (!both()) card.append(phoneQrBox(phone, '📱 ¿Sin mando? Usa un teléfono', 'Escanea el QR y toca «¡Unirme!» en el teléfono.'));
     const btns = el('div', 'btns');
     const go = el('button', 'pgp-go', '¡A correr!') as HTMLButtonElement;
     go.disabled = !both();

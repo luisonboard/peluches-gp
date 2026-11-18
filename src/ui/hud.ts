@@ -491,7 +491,7 @@ export class Hud {
     }
   }
 
-  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string, onFullscreen: (() => void) | null, onOnline: () => void, onSplit: (() => void) | null = null): void {
+  showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string, onFullscreen: (() => void) | null, onOnline: () => void, onSplit: (() => void) | null = null, onPhone: (() => void) | null = null): void {
     const wrap = el('div');
     wrap.style.width = 'min(760px, 100%)';
     const logo = el('div', 'pgp-logo');
@@ -591,6 +591,14 @@ export class Hud {
       sp.style.cssText = 'margin:0;background:#ff9a2a;box-shadow:0 7px 0 #c26a10;font-size:20px;padding:12px 22px';
       sp.onclick = () => onSplit();
       goRow.append(sp);
+    }
+    if (onPhone) {
+      // Teléfono como mando para 1 jugador (QR); en «2 jugadores» el QR ya está en la pantalla de unirse.
+      const ph = el('button', 'pgp-go', '📱 Mando');
+      ph.title = 'Usar un teléfono como mando';
+      ph.style.cssText = 'margin:0;background:#1fa59a;box-shadow:0 7px 0 #137168;font-size:20px;padding:12px 22px';
+      ph.onclick = () => onPhone();
+      goRow.append(ph);
     }
     goRow.append(gear);
     if (onFullscreen) {

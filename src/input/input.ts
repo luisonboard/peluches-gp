@@ -51,6 +51,8 @@ export class Input {
   private remote = new Map<DeviceId, Controls>();
   /** Nombre de cada teléfono para la pantalla de unirse ("Teléfono 1"…). */
   private remoteNames = new Map<DeviceId, string>();
+  /** Teléfono elegido como mando del jugador 1 en partidas de 1 jugador (los demás no cuentan en `read`). */
+  soloRemote: DeviceId | null = null;
   /** Vibración de un teléfono (la manda la red). */
   onRemoteRumble: (dev: DeviceId, ms: number) => void = () => {};
   /** Se llama en la primera interacción (para desbloquear el audio). */
@@ -166,7 +168,8 @@ export class Input {
   /** Estado combinado de todos los dispositivos (un solo jugador). */
   read(): Controls {
     const c = this.keyboard();
-    for (const p of [...this.padCtl.values(), ...this.remote.values()]) {
+    const solo = this.soloRemote ? this.remote.get(this.soloRemote) : undefined;
+    for (const p of solo ? [...this.padCtl.values(), solo] : this.padCtl.values()) {
       if (Math.abs(p.steer) > Math.abs(c.steer)) c.steer = p.steer;
       c.throttle = Math.max(c.throttle, p.throttle);
       c.brake = Math.max(c.brake, p.brake);
@@ -229,6 +232,7 @@ export class Input {
   rumble(strong: number, weak: number, ms: number, dev?: DeviceId): void {
     if (dev === 'kbd') return;
     if (dev && isPhone(dev)) return this.onRemoteRumble(dev, ms);
+    if (!dev && this.soloRemote) this.onRemoteRumble(this.soloRemote, ms);
     const idx = dev ? Number(dev.slice(3)) : this.lastPad;
     if (idx < 0) return;
     const p = navigator.getGamepads?.()[idx] as (Gamepad & { vibrationActuator?: { playEffect?: (t: string, o: object) => Promise<unknown> } }) | null;

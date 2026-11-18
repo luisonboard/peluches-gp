@@ -45,9 +45,10 @@ pausa. Derecha: Acelerar y Frenar juntos abajo (sin Acelerar si acelera solo), D
 juntos encima (en el perfil Peque, un solo botón "¡Usar!"). Ajustes (⚙ en el título o en la pausa): perfil, ayuda de manejo, voz,
 volante, nombres de los peluches y prueba del mando.
 
-**Teléfono como mando** (pantalla dividida): en «👥 2 jugadores» aparece un QR. Al escanearlo, el teléfono abre un
-mando con flechas y OK para los menús, y en la carrera los mismos botones táctiles (o el volante por giroscopio) con
-un HUD mínimo: puesto, vuelta, objeto y barra de poder. La carrera se ve en el computador.
+**Teléfono como mando**: en «👥 2 jugadores» aparece un QR. Al escanearlo, el teléfono abre un mando con flechas y
+OK para los menús, y en la carrera los mismos botones táctiles (o el volante por giroscopio) con un HUD mínimo:
+puesto, vuelta, objeto y barra de poder. La carrera se ve en el computador. Para jugar solo con el teléfono, el botón
+«📱 Mando» del título muestra el QR; en el teléfono se toca «🎮 Usar como mando» (y «Dejar de usarlo» para soltarlo).
 
 | Menús | Flechas + Enter | Palanca/cruceta + B |
 
@@ -307,7 +308,10 @@ podio final, sin errores. Entrar y salir 5 veces de la pantalla dividida: memori
   pantalla dividida no distingue entre teléfono, mando o teclado. Si un teléfono deja de mandar 0,7 s, se sueltan
   sus botones. Las vibraciones de su jugador llegan al teléfono (`buzz`; solo Android, Safari no vibra).
 - Al recargar la página o reconectarse, el teléfono conserva su id (sessionStorage) y vuelve como el mismo mando.
-- Fuera de la pantalla dividida, un teléfono conectado se suma a los controles del jugador 1.
+- Partidas de 1 jugador: un teléfono conectado no maneja hasta que se toca «🎮 Usar como mando» en él
+  (`Input.soloRemote`; solo uno a la vez). El botón «📱 Mando» del título abre un panel (`src/ui/phonePanel.ts`)
+  con el QR, los teléfonos conectados y «Dejar de usar el teléfono». Al salir de «2 jugadores», los teléfonos
+  quedan conectados pero sin manejar. Las teclas de menú de un teléfono solo cuentan si maneja a alguien.
 - Desde `localhost` el QR no sirve al teléfono: la pantalla lo avisa. Hay que usar `npm run dev:lan` o la dirección
   publicada (además, el giroscopio exige HTTPS).
 

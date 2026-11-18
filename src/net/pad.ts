@@ -152,5 +152,5 @@ export class PadHub {
 }
 
 const NONE: Controls = { steer: 0, throttle: 0, brake: 0, drift: false, item: false, power: false, look: false };
-const KEYS = new Set<PadKey>(['left', 'right', 'up', 'down', 'ok', 'back', 'pause'] satisfies (MenuKey | 'pause')[]);
+const KEYS = new Set<PadKey>(['left', 'right', 'up', 'down', 'ok', 'back', 'pause', 'solo', 'unsolo'] satisfies (MenuKey | 'pause' | 'solo' | 'unsolo')[]);
 const clamp = (v: unknown, a: number, b: number): number => (typeof v === 'number' && Number.isFinite(v) ? Math.max(a, Math.min(b, v)) : 0);

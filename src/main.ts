@@ -25,6 +25,7 @@ import { Particles } from './fx/particles';
 import { GameAudio } from './audio/audio';
 import { Hud, LOCAL_COLORS, type TitleSetup } from './ui/hud';
 import { PadHub } from './net/pad';
+import { openPhonePanel } from './ui/phonePanel';
 import { Arena } from './game/arena';
 import { PlushMaterials } from './game/plush';
 import { displayName } from './game/characters';
@@ -109,18 +110,35 @@ export function startGame(): void {
   const hud = new Hud();
   hud.setTrack(track);
 
-  // Teléfonos como mando (se abre la sala de mandos al entrar en «2 jugadores»).
+  // Teléfonos como mando (se abre la sala de mandos al entrar en «2 jugadores» o en «📱 Mando»).
+  // En «2 jugadores» cada teléfono maneja a su jugador. Fuera de ahí, solo maneja el que se eligió como mando del
+  // jugador 1 (`input.soloRemote`, botón «🎮 Usar como mando» en el teléfono); los demás quedan conectados sin manejar.
   const pads = new PadHub();
+  /** Panel «📱 Mando» abierto. */
+  let phonePanel: ReturnType<typeof openPhonePanel> | null = null;
   pads.onControls = (dev, c, label) => input.setRemote(dev, c, label);
-  pads.onKey = (dev, k) => input.pushRemote(dev, k);
+  pads.onKey = (dev, k) => {
+    if (k === 'solo') return setSoloPhone(dev);
+    if (k === 'unsolo') return input.soloRemote === dev ? setSoloPhone(null) : undefined;
+    // Las teclas de menú cuentan si el teléfono maneja a alguien (o en la pantalla de unirse, para unirse).
+    if (join || split?.devs.includes(dev) || input.soloRemote === dev) input.pushRemote(dev, k);
+  };
   pads.onJoin = (dev) => {
     join?.refresh();
+    phonePanel?.refresh();
     hud.toast(`📱 ${pads.label(dev)} conectado`, '#c8f7c5');
   };
   pads.onLeave = (_dev, label) => {
     join?.refresh();
+    phonePanel?.refresh();
     hud.toast(`📱 ${label} se desconectó`, '#ffe9a8');
   };
+  function setSoloPhone(dev: DeviceId | null): void {
+    if (input.soloRemote === dev) return;
+    input.soloRemote = dev;
+    phonePanel?.refresh();
+    hud.toast(dev ? `📱 ${pads.label(dev)} maneja al jugador 1` : '📱 El teléfono ya no maneja', dev ? '#c8f7c5' : '#ffe9a8');
+  }
   input.onRemoteRumble = (dev, ms) => pads.buzz(dev, ms);
 
   /** Cambia de pista: libera la actual y monta la nueva (arena, podio y minimapa incluidos). `force`: recargar aunque sea la misma. */
@@ -362,6 +380,7 @@ export function startGame(): void {
       fullscreenSupported() ? toggleFullscreen : null,
       () => openOnline(),
       touchOn ? null : openSplit,
+      touchOn ? null : openPhones,
     );
     hud.screenClass('title');
     podium.hide();
@@ -941,6 +960,20 @@ export function startGame(): void {
 
   // ---------------- Teléfonos como mando ----------------
 
+  /** Panel «📱 Mando» del título: QR para usar un teléfono en partidas de 1 jugador. */
+  function openPhones(): void {
+    hud.closeScreen();
+    phonePanel = openPhonePanel({
+      phoneUrl: pads.start().then(() => ({ url: pads.url(), code: pads.code })),
+      phones: () => pads.devices.map((d) => ({ label: pads.label(d), solo: input.soloRemote === d })),
+      onRelease: () => setSoloPhone(null),
+      onClose: () => {
+        phonePanel = null;
+        showTitle();
+      },
+    });
+  }
+
   let padHudT = 0;
   /** Dice a cada teléfono qué mostrar (unirse, manejar, menú) y le manda su HUD mínimo unas 7 veces por segundo. */
   function syncPads(dt: number): void {
@@ -953,13 +986,14 @@ export function startGame(): void {
         pads.setState(dev, i ? { mode: 'join', who: i.who, name: i.name, color: LOCAL_COLORS[i.who], ready: i.ready } : { mode: 'join', who: -1 });
         continue;
       }
-      // En pantalla dividida maneja su jugador; con un solo jugador, el teléfono se suma a los controles del jugador 1.
-      const L = split ? split.devs.indexOf(dev) : 0;
+      // En pantalla dividida maneja su jugador; con un solo jugador, solo el teléfono elegido maneja al jugador 1.
+      const L = split ? split.devs.indexOf(dev) : input.soloRemote === dev ? 0 : -1;
+      const pick = split ? {} : L === 0 ? { solo: true } : { canSolo: true };
       const k = L >= 0 ? localKarts()[L] : undefined;
       const who = k ? { who: L, name: k.name, color: LOCAL_COLORS[L] } : { who: -1 };
       if (mode === 'race' && k) {
         const pr = L === 0 ? settings : settings.p2;
-        pads.setState(dev, { mode: 'race', ...who, auto: pr.autoAccel, peque: pr.profile === 'peque' });
+        pads.setState(dev, { mode: 'race', ...who, ...pick, auto: pr.autoAccel, peque: pr.profile === 'peque' });
         if (sendHud)
           pads.setHud(dev, {
             pos: k.finished && k.place ? k.place : k.position,
@@ -970,8 +1004,14 @@ export function startGame(): void {
             pow: Math.round(k.power * 20) / 20,
             fin: k.finished,
           });
-      } else if (mode === 'race') pads.setState(dev, { mode: 'wait', ...who });
-      else pads.setState(dev, { mode: 'menu', ...who, note: mode === 'paused' ? 'Pausa: elige con las flechas' : mode === 'results' ? 'Resultados: elige con las flechas' : undefined });
+      } else if (mode === 'race') pads.setState(dev, { mode: 'wait', ...who, ...pick });
+      else
+        pads.setState(dev, {
+          mode: 'menu',
+          ...who,
+          ...pick,
+          note: L < 0 ? undefined : mode === 'paused' ? 'Pausa: elige con las flechas' : mode === 'results' ? 'Resultados: elige con las flechas' : undefined,
+        });
     }
   }
 
@@ -999,7 +1039,9 @@ export function startGame(): void {
     if (join) join.input(input.consumeMenuEvents());
     else {
       const menuKeys = input.consumeMenu();
-      if (closeSettings) {
+      if (phonePanel) {
+        if (menuKeys.includes('back') || menuKeys.includes('ok')) phonePanel.close();
+      } else if (closeSettings) {
         if (menuKeys.includes('back')) closeSettings();
       } else if (hud.menuOpen) hud.menuInput(menuKeys);
     }

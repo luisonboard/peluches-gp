@@ -327,10 +327,20 @@ export function startPhone(): void {
         w.append(dpad({ left: 'peluche', right: 'peluche', up: 'perfil', down: 'perfil' }, '¡Listo!'));
         box.append(btn('go alt', state.ready ? 'Cambiar' : 'Salir', () => sendKey('back')));
       }
+    } else if (state.canSolo) {
+      // Fuera de «2 jugadores»: conectado, pero solo maneja si se elige.
+      box.append(
+        el('div', 'note', state.mode === 'wait' ? 'Hay una carrera en marcha. Puedes tomar el control del jugador 1 ahora.' : 'Conectado. Este teléfono todavía no maneja a nadie.'),
+        btn('go', '🎮 Usar como mando', () => sendKey('solo')),
+        el('div', 'sub', 'Maneja al jugador 1 en las partidas de 1 jugador.'),
+      );
     } else if (state.mode === 'wait') {
-      box.append(el('div', 'note', state.note ?? 'Esta carrera ya empezó sin este teléfono. Entras en la siguiente.'), dpad());
+      box.append(el('div', 'note', state.note ?? 'Esta carrera ya empezó sin este teléfono. Entras en la siguiente.'));
     } else {
-      box.append(el('div', 'sub', state.note ?? 'Muévete por el menú de la pantalla'), dpad(), btn('go alt', 'Atrás', () => sendKey('back')));
+      const row = el('div', 'row');
+      row.append(btn('go alt', 'Atrás', () => sendKey('back')));
+      if (state.solo) row.append(btn('go alt', 'Dejar de usarlo', () => sendKey('unsolo')));
+      box.append(el('div', 'sub', state.note ?? 'Muévete por el menú de la pantalla'), dpad(), row);
     }
     box.append(steerOpts());
     if (steerMode === 'giro' && !gyro.active && gyro.permission !== 'desconocido')

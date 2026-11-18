@@ -90,7 +90,8 @@ export type Msg =
 
 /** Versión del protocolo del mando (va en `padhi`). */
 export const PAD_PROTOCOL = 1;
-export type PadKey = 'left' | 'right' | 'up' | 'down' | 'ok' | 'back' | 'pause';
+/** `solo`/`unsolo`: usar (o dejar de usar) el teléfono como mando del jugador 1 en partidas de 1 jugador. */
+export type PadKey = 'left' | 'right' | 'up' | 'down' | 'ok' | 'back' | 'pause' | 'solo' | 'unsolo';
 
 export interface PadState {
   /** `menu`: flechas y OK. `join`: pantalla de unirse. `race`: manejar. `wait`: la carrera es de otros. `reject`: versión distinta. */
@@ -110,6 +111,10 @@ export interface PadState {
   peque?: boolean;
   /** Texto de ayuda o de error. */
   note?: string;
+  /** Fuera de «2 jugadores»: puede elegirse como mando del jugador 1 (botón «Usar como mando»). */
+  canSolo?: boolean;
+  /** Es el mando del jugador 1 en partidas de 1 jugador (botón «Dejar de usarlo»). */
+  solo?: boolean;
 }
 
 export interface PadHud {
