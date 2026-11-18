@@ -1,6 +1,7 @@
 // Botones táctiles para teléfonos y tablets (multitáctil con Pointer Events).
-// Izquierda: ◀ ▶ (o, con giroscopio, centrar y un indicador), mirar atrás y pausa. Derecha: acelerar y frenar
-// juntos abajo, derrapar al lado, y objeto y poder juntos encima.
+// Izquierda: ◀ ▶, mirar atrás y pausa; con giroscopio, objeto y poder en la esquina, el indicador del volante,
+// y centrar, mirar atrás y pausa encima. Derecha: acelerar y frenar juntos abajo, derrapar al lado y, con
+// botones ◀ ▶, objeto y poder juntos encima.
 // Con el perfil Peque, objeto y poder comparten un solo botón grande.
 import type { Controls } from './input';
 import type { Gyro } from './gyro';
@@ -85,35 +86,53 @@ export class TouchControls {
       return b;
     };
     const peque = s.profile === 'peque';
-    if (s.steerMode === 'giro') {
-      mk('center', '<span><span class="ic">⟲</span>Centrar</span>', 76, { left: L, bottom: B });
+    const giro = s.steerMode === 'giro';
+    // Con giroscopio la izquierda queda libre de ◀ ▶: Objeto y Poder pasan a la esquina izquierda (lo siguiente
+    // en uso tras acelerar y frenar), con el indicador del volante a su lado y Centrar, mirar atrás y pausa encima.
+    if (giro) {
+      let wheelX = 0;
+      if (peque) {
+        mk('use', '<span><span class="ic">⭐</span>¡Usar!</span>', 96, { left: L, bottom: B });
+        wheelX = 110;
+      } else {
+        mk('item', '<span><span class="ic">🎁</span>Objeto</span>', 80, { left: L, bottom: B });
+        mk('power', '<span><span class="ic">⚡</span>Poder</span>', 80, { left: `calc(${L} + 92px)`, bottom: B });
+        wheelX = 186;
+      }
       const w = document.createElement('div');
       w.className = 'wheel';
-      Object.assign(w.style, { left: `calc(${L} + 92px)`, bottom: B });
+      Object.assign(w.style, { left: `calc(${L} + ${wheelX}px)`, bottom: B });
       this.root.append(w);
       this.wheel = w;
     } else {
       mk('left', '<span class="ic">◀</span>', 96, { left: L, bottom: B });
       mk('right', '<span class="ic">▶</span>', 96, { left: `calc(${L} + 110px)`, bottom: B });
     }
-    // Derecha, abajo: Acelerar (en la esquina) y Frenar juntos, y Derrapar a su lado. Encima: Objeto y Poder juntos.
-    // Con aceleración automática no hay botón de acelerar y Frenar pasa a la esquina.
+    // Derecha, abajo: Acelerar (en la esquina) y Frenar juntos, y Derrapar a su lado. Con botones ◀ ▶, encima:
+    // Objeto y Poder juntos. Con aceleración automática no hay botón de acelerar y Frenar pasa a la esquina.
     const gas = !s.autoAccel;
     if (gas) mk('gas', '<span><span class="ic">▲</span>Acelerar</span>', 100, { right: R, bottom: B });
     const brakeR = gas ? 112 : 0;
     mk('brake', '<span><span class="ic">▼</span>Frenar</span>', 84, { right: `calc(${R} + ${brakeR}px)`, bottom: B });
     mk('drift', '<span><span class="ic">🌀</span>Derrapar</span>', 88, { right: `calc(${R} + ${brakeR + 96}px)`, bottom: B });
-    const up = `calc(${B} + ${gas ? 116 : 100}px)`;
-    if (peque) {
-      mk('use', '<span><span class="ic">⭐</span>¡Usar!</span>', 96, { right: `calc(${R} + ${gas ? 50 : 0}px)`, bottom: up });
-    } else {
-      mk('power', '<span><span class="ic">⚡</span>Poder</span>', 80, { right: `calc(${R} + ${gas ? 10 : 2}px)`, bottom: up });
-      mk('item', '<span><span class="ic">🎁</span>Objeto</span>', 80, { right: `calc(${R} + ${gas ? 100 : 92}px)`, bottom: up });
+    if (!giro) {
+      const up = `calc(${B} + ${gas ? 116 : 100}px)`;
+      if (peque) {
+        mk('use', '<span><span class="ic">⭐</span>¡Usar!</span>', 96, { right: `calc(${R} + ${gas ? 50 : 0}px)`, bottom: up });
+      } else {
+        mk('power', '<span><span class="ic">⚡</span>Poder</span>', 80, { right: `calc(${R} + ${gas ? 10 : 2}px)`, bottom: up });
+        mk('item', '<span><span class="ic">🎁</span>Objeto</span>', 80, { right: `calc(${R} + ${gas ? 100 : 92}px)`, bottom: up });
+      }
     }
-    // Izquierda, encima del volante: mirar atrás y pausa.
-    const upL = `calc(${B} + ${s.steerMode === 'giro' ? 96 : 112}px)`;
-    mk('look', '<span class="ic" style="font-size:24px">👀</span>', 56, { left: L, bottom: upL });
-    mk('pause', '<span class="ic" style="font-size:22px">❚❚</span>', 56, { left: `calc(${L} + 68px)`, bottom: upL });
+    // Izquierda, encima de lo de abajo: (Centrar con giroscopio), mirar atrás y pausa.
+    const upL = `calc(${B} + ${giro ? (peque ? 110 : 94) : 112}px)`;
+    let x = 0;
+    if (giro) {
+      mk('center', '<span><span class="ic" style="font-size:22px">⟲</span>Centrar</span>', 64, { left: L, bottom: upL });
+      x = 76;
+    }
+    mk('look', '<span class="ic" style="font-size:24px">👀</span>', 56, { left: `calc(${L} + ${x}px)`, bottom: upL });
+    mk('pause', '<span class="ic" style="font-size:22px">❚❚</span>', 56, { left: `calc(${L} + ${x + 68}px)`, bottom: upL });
   }
 
   show(v: boolean): void {
