@@ -205,3 +205,7 @@ después del 7, ya que no depende de las pistas nuevas.
 6. Hito 13 (17 nov 2026): el teléfono sirve de mando en la pantalla dividida, con un HUD mínimo en el teléfono. No
    se transmite video al teléfono (retraso y costo de dibujo). Si se quiere la vista propia en el teléfono, el
    camino es mezclar la pantalla dividida con el modo en línea, en un hito aparte.
+7. 18 nov 2026: la pantalla dividida admite hasta 4 jugadores (cuadrícula 2 × 2; con 3, el cuarto cuadrante lleva
+   el minimapa). Para que el equipo anfitrión no se caliente: con 3 o 4 jugadores, calidad Baja sin mapa de
+   sombras y resolución ≤ 1,25×; pausa sin redibujar; resultados a 30 fps; y paso automático a 30 fps estables si
+   ni con la resolución al mínimo llega a 60.

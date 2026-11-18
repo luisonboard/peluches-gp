@@ -168,7 +168,7 @@ export function startPhone(): void {
       }, 4000);
     } catch (e) {
       const msg = (e as Error).message;
-      error = /No existe/.test(msg) ? 'No hay ninguna pantalla con ese código. En el computador, abre «2 jugadores» y vuelve a escanear el QR.' : msg;
+      error = /No existe/.test(msg) ? 'No hay ninguna pantalla con ese código. En el computador, abre «2–4 jugadores» y vuelve a escanear el QR.' : msg;
     }
     connecting = false;
     render();
@@ -302,7 +302,7 @@ export function startPhone(): void {
     if (racing) return renderHud();
 
     if (!code) {
-      box.append(el('h1', 'stroke', '📱 Mando'), el('div', 'note', 'Falta el código de la pantalla. Escanea el QR que aparece en el computador, en «2 jugadores».'));
+      box.append(el('h1', 'stroke', '📱 Mando'), el('div', 'note', 'Falta el código de la pantalla. Escanea el QR que aparece en el computador, en «2–4 jugadores».'));
       return;
     }
     if (!state) {
@@ -317,7 +317,7 @@ export function startPhone(): void {
     box.append(tag());
     if (state.mode === 'join') {
       if (state.who < 0) {
-        box.append(el('div', 'sub', 'Pantalla de 2 jugadores'), btn('go', '¡Unirme!', () => sendKey('ok')));
+        box.append(el('div', 'sub', 'Pantalla dividida (2 a 4 jugadores)'), btn('go', '¡Unirme!', () => sendKey('ok')));
       } else {
         box.append(
           el('div', 'sub', state.ready ? '¡Listo! Esperando al otro jugador…' : 'Elige tu peluche y tu perfil'),
@@ -328,7 +328,7 @@ export function startPhone(): void {
         box.append(btn('go alt', state.ready ? 'Cambiar' : 'Salir', () => sendKey('back')));
       }
     } else if (state.canSolo) {
-      // Fuera de «2 jugadores»: conectado, pero solo maneja si se elige.
+      // Fuera de «2–4 jugadores»: conectado, pero solo maneja si se elige.
       box.append(
         el('div', 'note', state.mode === 'wait' ? 'Hay una carrera en marcha. Puedes tomar el control del jugador 1 ahora.' : 'Conectado. Este teléfono todavía no maneja a nadie.'),
         btn('go', '🎮 Usar como mando', () => sendKey('solo')),

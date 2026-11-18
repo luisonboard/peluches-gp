@@ -27,8 +27,8 @@ export interface Settings {
   trackId: string;
   /** Eligió la copa de 3 carreras. */
   cup: boolean;
-  /** Jugador 2 de la pantalla dividida (el jugador 1 usa los ajustes de arriba). */
-  p2: PlayerPrefs;
+  /** Jugadores 2, 3 y 4 de la pantalla dividida (el jugador 1 usa los ajustes de arriba). */
+  others: PlayerPrefs[];
 }
 
 /** Lo que cambia por jugador en la pantalla dividida. */
@@ -54,16 +54,25 @@ export const PROFILE_DEFAULTS: Record<Profile, Pick<Settings, 'autoAccel' | 'sma
 const KEY = 'pgp.settings';
 
 export function defaultSettings(): Settings {
-  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3, trackId: 'cuarto', cup: false, p2: { profile: 'normal', ...profileAssist('normal'), charIndex: 0 } };
+  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3, trackId: 'cuarto', cup: false, others: OTHER_CHARS.map((charIndex) => ({ profile: 'normal', ...profileAssist('normal'), charIndex })) };
 }
+
+/** Peluche por defecto de los jugadores 2, 3 y 4 (el 1 empieza con el zorro, índice 3). */
+const OTHER_CHARS = [0, 1, 2];
+/** Jugadores locales como máximo en la pantalla dividida. */
+export const MAX_LOCAL = 4;
 
 export function loadSettings(): Settings {
   const s = defaultSettings();
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
-      const saved = JSON.parse(raw) as Partial<Settings>;
-      Object.assign(s, saved, { p2: { ...s.p2, ...(saved.p2 ?? {}) } });
+      const saved = JSON.parse(raw) as Partial<Settings> & { p2?: Partial<PlayerPrefs> };
+      // Versiones anteriores guardaban solo el jugador 2 en `p2`.
+      const old = saved.others ?? (saved.p2 ? [saved.p2] : []);
+      const others = s.others.map((d, i) => ({ ...d, ...(old[i] ?? {}) }));
+      delete saved.p2;
+      Object.assign(s, saved, { others });
     }
   } catch {
     /* sin almacenamiento: valores por defecto */

@@ -4,7 +4,7 @@ import { bus, installErrorHooks } from './core/events';
 import { params } from './core/params';
 import { Rng } from './core/rng';
 import { Loop } from './core/loop';
-import { detectQuality, DynamicResolution, GpuTimer, PRESETS, type QualityName } from './core/quality';
+import { detectQuality, DynamicResolution, GpuTimer, HeatGuard, PRESETS, type QualityName } from './core/quality';
 import { Input, type Controls, type DeviceId } from './input/input';
 import { createStage, followSun, applyLook, setShadows } from './render/scene';
 import { disposeTree } from './render/dispose';
@@ -29,7 +29,7 @@ import { openPhonePanel } from './ui/phonePanel';
 import { Arena } from './game/arena';
 import { PlushMaterials } from './game/plush';
 import { displayName } from './game/characters';
-import { loadSettings, saveSettings, applyProfile, profileAssist, type Profile } from './core/settings';
+import { loadSettings, saveSettings, applyProfile, profileAssist, type Profile, type PlayerPrefs } from './core/settings';
 import { openSplitJoin, type SplitPlayer } from './ui/split';
 import { Gyro } from './input/gyro';
 import { TouchControls, isTouchDevice } from './input/touch';
@@ -51,7 +51,7 @@ export function startGame(): void {
 
   const app = document.getElementById('app')!;
   const quality = detectQuality(params.quality);
-  /** Calidad elegida (o detectada); en pantalla dividida se baja un nivel y al salir se vuelve a esta. */
+  /** Calidad elegida (o detectada); en pantalla dividida se baja (un nivel con 2 jugadores, a Bajo con 3 o 4) y al salir se vuelve a esta. */
   const baseQuality: QualityName = quality.name;
   const LOWER: Record<QualityName, QualityName> = { high: 'medium', medium: 'low', low: 'low' };
   const stage = createStage(app, quality);
@@ -82,11 +82,10 @@ export function startGame(): void {
   mountTrack(params.track ?? (wantsCup ? CUP_TRACKS[0] : settings.trackId));
 
   const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 1600);
-  const chase = new ChaseCam(camera);
-  // Jugador 2 de la pantalla dividida: su propia cámara (mitad de abajo).
-  const camera2 = new THREE.PerspectiveCamera(68, 1, 0.3, 1600);
-  const chase2 = new ChaseCam(camera2);
-  const chases = [chase, chase2];
+  // Una cámara por jugador de la pantalla dividida (la del jugador 1 es también la del título y el podio).
+  const cameras = [camera, ...[1, 2, 3].map(() => new THREE.PerspectiveCamera(68, 1, 0.3, 1600))];
+  const chases = cameras.map((c) => new ChaseCam(c));
+  const chase = chases[0];
   const sparks = new Particles(quality.particles, true);
   const dust = new Particles(Math.round(quality.particles * 0.6), false);
   scene.add(sparks.points, dust.points);
@@ -110,8 +109,8 @@ export function startGame(): void {
   const hud = new Hud();
   hud.setTrack(track);
 
-  // Teléfonos como mando (se abre la sala de mandos al entrar en «2 jugadores» o en «📱 Mando»).
-  // En «2 jugadores» cada teléfono maneja a su jugador. Fuera de ahí, solo maneja el que se eligió como mando del
+  // Teléfonos como mando (se abre la sala de mandos al entrar en «2–4 jugadores» o en «📱 Mando»).
+  // En «2–4 jugadores» cada teléfono maneja a su jugador. Fuera de ahí, solo maneja el que se eligió como mando del
   // jugador 1 (`input.soloRemote`, botón «🎮 Usar como mando» en el teléfono); los demás quedan conectados sin manejar.
   const pads = new PadHub();
   /** Panel «📱 Mando» abierto. */
@@ -172,8 +171,15 @@ export function startGame(): void {
   if (params.fps !== null) loop.fpsLimit = params.fps;
   const dynRes = new DynamicResolution(renderer, Math.min(devicePixelRatio, quality.maxPixelRatio), 1000 / (loop.fpsLimit || 60));
   const gpu = new GpuTimer(renderer);
+  /** 3 y 4 jugadores: si el equipo no da más, pasa a 30 fps estables (ver HeatGuard). */
+  const heat = new HeatGuard();
+  /** Cuadros seguidos en pausa (local): la escena está quieta, así que tras dibujarla una vez no se vuelve a dibujar. */
+  let pausedFrames = 0;
+  /** fps de la carrera: 60, o 30 si el protector de temperatura lo decidió. */
+  const raceFps = (): number => params.fps ?? (heat.tripped ? 30 : 60);
 
   function resize(): void {
+    pausedFrames = 0;
     const w = app.clientWidth;
     const h = app.clientHeight;
     renderer.setSize(w, h);
@@ -226,8 +232,8 @@ export function startGame(): void {
   let karts: Kart[] = [];
   /** Copa local en curso (en línea la lleva la sesión). */
   let cup: Cup | null = null;
-  /** Pantalla dividida en curso: el dispositivo de cada jugador (jugador 1 arriba, jugador 2 abajo). */
-  let split: { devs: [DeviceId, DeviceId] } | null = null;
+  /** Pantalla dividida en curso: el dispositivo de cada jugador (2: arriba y abajo; 3 o 4: J1 J2 arriba, J3 J4 abajo). */
+  let split: { devs: DeviceId[] } | null = null;
   /** Pantalla "Pulsa un botón para unirte" abierta. */
   let join: ReturnType<typeof openSplitJoin> | null = null;
   const activeCup = (): Cup | null => (session.active ? session.cup : cup);
@@ -252,8 +258,8 @@ export function startGame(): void {
     audio.muted = !settings.sfx;
     touch.configure(settings);
     if (race) {
-      // Jugador 1 con los ajustes generales; jugador 2 (pantalla dividida) con los suyos.
-      const prefs = [settings, settings.p2];
+      // Jugador 1 con los ajustes generales; jugadores 2 a 4 (pantalla dividida) con los suyos.
+      const prefs = playerPrefs();
       race.pilots = karts
         .filter((k) => k.localNo >= 0)
         .sort((a, b) => a.localNo - b.localNo)
@@ -299,8 +305,8 @@ export function startGame(): void {
         return k;
       });
     } else {
-      // Los jugadores de este dispositivo van primero (en pantalla dividida, el 1 y el 2).
-      const mine = split ? [setup.charIndex, settings.p2.charIndex] : [setup.charIndex];
+      // Los jugadores de este dispositivo van primero (en pantalla dividida, del 1 al 4).
+      const mine = split ? playerPrefs().slice(0, split.devs.length).map((p, i) => (i ? p.charIndex : setup.charIndex)) : [setup.charIndex];
       const roster = [...mine.map((i) => CHARACTERS[i]), ...CHARACTERS.filter((_, i) => !mine.includes(i))];
       karts = roster.map((c, i) => {
         const k = makeKart(i, c, i < mine.length);
@@ -478,7 +484,7 @@ export function startGame(): void {
     camera.clearViewOffset();
     audio.playMusic('race');
     mode = 'race';
-    loop.fpsLimit = params.fps ?? 60;
+    loop.fpsLimit = raceFps();
     dynRes.targetMs = 1000 / (loop.fpsLimit || 60);
     hud.setRaceVisible(true);
     touch.show(touchOn && !split);
@@ -499,10 +505,13 @@ export function startGame(): void {
     mode = 'paused';
     touch.show(false);
     audio.music?.duck(true);
+    // En pausa (sin red) la escena está quieta: menos cuadros y, tras el primero, sin volver a dibujar.
+    if (!session.active) loop.fpsLimit = params.fps ?? 30;
     const resume = (): void => {
       hud.closeScreen();
       audio.music?.duck(false);
       mode = 'race';
+      loop.fpsLimit = raceFps();
       touch.show(touchOn && !split);
     };
     if (session.active) hud.showPause(resume, null, leaveOnline, () => showSettings(pause2), fullscreenSupported() ? toggleFullscreen : null, 'Salir de la sala');
@@ -513,9 +522,14 @@ export function startGame(): void {
     }
   }
 
-  // ---------------- Pantalla dividida (2 jugadores) ----------------
+  // ---------------- Pantalla dividida (2 a 4 jugadores) ----------------
 
-  /** Karts de este dispositivo, en orden (jugador 1, jugador 2). */
+  /** Ajustes de cada jugador: el 1 usa los generales; del 2 al 4, los suyos. */
+  function playerPrefs(): PlayerPrefs[] {
+    return [settings, ...settings.others];
+  }
+
+  /** Karts de este dispositivo, en orden (jugador 1, 2, 3, 4). */
   function localKarts(): Kart[] {
     return karts.filter((k) => k.localNo >= 0).sort((a, b) => a.localNo - b.localNo);
   }
@@ -535,10 +549,7 @@ export function startGame(): void {
   function openSplit(): void {
     hud.closeScreen();
     join = openSplitJoin({
-      saved: [
-        { charIndex: setup.charIndex, profile: settings.profile },
-        { charIndex: settings.p2.charIndex, profile: settings.p2.profile },
-      ],
+      saved: playerPrefs().map((p, i) => ({ charIndex: i ? p.charIndex : setup.charIndex, profile: p.profile })),
       summary: splitSummary(),
       deviceName: (d) => input.deviceName(d),
       phoneUrl: pads.start().then(() => ({ url: pads.url(), code: pads.code })),
@@ -560,17 +571,28 @@ export function startGame(): void {
     Object.assign(settings, profileAssist(p));
   }
 
-  function startSplit(players: [SplitPlayer, SplitPlayer]): void {
-    split = { devs: [players[0].dev, players[1].dev] };
+  function startSplit(players: SplitPlayer[]): void {
+    const n = Math.min(players.length, cameras.length);
+    if (n < 2) return;
+    players = players.slice(0, n);
+    split = { devs: players.map((p) => p.dev) };
     setup.charIndex = players[0].charIndex;
     setP1Profile(players[0].profile);
-    settings.p2 = { ...settings.p2, profile: players[1].profile, ...profileAssist(players[1].profile), charIndex: players[1].charIndex };
+    players.slice(1).forEach((p, i) => {
+      settings.others[i] = { ...settings.others[i], profile: p.profile, ...profileAssist(p.profile), charIndex: p.charIndex };
+    });
     storeSetup();
-    hud.setPlayers(2);
-    // Cada vista es el doble de ancha que alta: campo de visión más cerrado.
-    chase.baseFov = chase2.baseFov = 52;
-    // En pantalla dividida la calidad baja un nivel (sombras y partículas).
-    applyQuality(LOWER[baseQuality]);
+    hud.setPlayers(n);
+    // Con 2, cada vista es el doble de ancha que alta: campo de visión más cerrado. En la cuadrícula 2 × 2 cada
+    // vista tiene la forma de la pantalla, pero es pequeña: un poco más cerrado que a pantalla completa.
+    for (const c of chases) c.baseFov = n === 2 ? 52 : 62;
+    // Rendimiento (que el equipo no se caliente): cada vista dibuja la escena entera otra vez.
+    // - 2 jugadores: la calidad baja un nivel (sombras y partículas).
+    // - 3 y 4: calidad Baja (sin mapa de sombras, que se tendría que dibujar una vez por vista; menos partículas y
+    //   decorado), resolución hasta 1,25× y, si aun así no llega, 30 fps estables.
+    applyQuality(n === 2 ? LOWER[baseQuality] : 'low');
+    dynRes.setBase(Math.min(devicePixelRatio, quality.maxPixelRatio, n >= 3 ? 1.25 : Infinity));
+    heat.reset(n >= 3 && params.fps === null);
     if (setup.cup) startCup();
     else startRace();
   }
@@ -579,8 +601,22 @@ export function startGame(): void {
     if (!split) return;
     split = null;
     hud.setPlayers(1);
-    chase.baseFov = 68;
+    for (const c of chases) c.baseFov = 68;
     applyQuality(baseQuality);
+    dynRes.setBase(Math.min(devicePixelRatio, quality.maxPixelRatio));
+    heat.reset(false);
+  }
+
+  /**
+   * Rectángulos de cada vista en píxeles CSS, con y desde abajo (como `setViewport`).
+   * 2 jugadores: arriba y abajo. 3 y 4: cuadrícula 2 × 2 (con 3, el cuarto cuadrante queda para el minimapa).
+   */
+  function splitRects(n: number, W: number, H: number): [x: number, y: number, w: number, h: number][] {
+    const hh = Math.floor(H / 2);
+    if (n === 2) return [[0, H - hh, W, hh], [0, 0, W, H - hh]];
+    const hw = Math.floor(W / 2);
+    const all: [number, number, number, number][] = [[0, H - hh, hw, hh], [hw, H - hh, W - hw, hh], [0, 0, hw, H - hh], [hw, 0, W - hw, H - hh]];
+    return all.slice(0, n);
   }
 
   // ---------------- En línea ----------------
@@ -992,7 +1028,7 @@ export function startGame(): void {
       const k = L >= 0 ? localKarts()[L] : undefined;
       const who = k ? { who: L, name: k.name, color: LOCAL_COLORS[L] } : { who: -1 };
       if (mode === 'race' && k) {
-        const pr = L === 0 ? settings : settings.p2;
+        const pr = playerPrefs()[L] ?? settings;
         pads.setState(dev, { mode: 'race', ...who, ...pick, auto: pr.autoAccel, peque: pr.profile === 'peque' });
         if (sendHud)
           pads.setHud(dev, {
@@ -1032,7 +1068,9 @@ export function startGame(): void {
       if (mode === 'race') pause();
       else if (mode === 'paused' && !closeSettings) {
         hud.closeScreen();
+        audio.music?.duck(false);
         mode = 'race';
+        loop.fpsLimit = raceFps();
         touch.show(touchOn && !split);
       }
     }
@@ -1067,6 +1105,8 @@ export function startGame(): void {
         if (resultsShownAt < 0 && race.time - race.doneAt > 2.5 && mode !== 'paused' && (!session.active || karts[0].place > 0)) {
           resultsShownAt = race.time;
           mode = 'results';
+          // Podio y tabla: no hace falta ir a 60 fps (menos calor mientras se mira la clasificación).
+          loop.fpsLimit = params.fps ?? 30;
           touch.show(false);
           podium.show(race.order.slice(0, 3).map((k) => k.char));
           hud.setRaceVisible(false);
@@ -1102,19 +1142,18 @@ export function startGame(): void {
       frameShowroom(0.19, 0.24);
     }
     else if (mode !== 'paused') {
-      chase.update(dt, p, mode === 'race' && ctl.look);
-      if (split && karts[1]) chase2.update(dt, karts[1], mode === 'race' && !!ctls[1]?.look);
+      if (split) localKarts().forEach((k, L) => chases[L]?.update(dt, k, mode === 'race' && !!ctls[L]?.look));
+      else chase.update(dt, p, mode === 'race' && ctl.look);
     }
     if (mode !== 'title' && !(mode === 'results' && podium.visible) && camera.view?.enabled) camera.clearViewOffset();
-    // Pantalla dividida: dos vistas (arriba el jugador 1, abajo el 2) mientras se corre; el podio, a pantalla completa.
-    const splitView = !!split && !!karts[1] && params.cam !== 'top' && params.cam !== 'free' && (mode === 'race' || mode === 'paused' || (mode === 'results' && !podium.visible));
+    // Pantalla dividida: una vista por jugador mientras se corre; el podio, a pantalla completa.
+    const locals = split ? localKarts() : [];
+    const splitView = !!split && locals.length === split.devs.length && params.cam !== 'top' && params.cam !== 'free' && (mode === 'race' || mode === 'paused' || (mode === 'results' && !podium.visible));
     const W = app.clientWidth;
     const H = app.clientHeight;
-    const topH = Math.floor(H / 2);
-    if (splitView) {
-      setAspect(camera, W / topH);
-      setAspect(camera2, W / (H - topH));
-    } else setAspect(camera, W / H);
+    const rects = splitView ? splitRects(locals.length, W, H) : [];
+    if (splitView) rects.forEach(([, , w, h], i) => setAspect(cameras[i], w / h));
+    else setAspect(camera, W / H);
     if (podium.visible) followSun(stage, podium.pos.x, podium.pos.y, podium.pos.z);
     else followSun(stage, p.pos.x, p.pos.y, p.pos.z);
     podium.update(dt);
@@ -1137,20 +1176,29 @@ export function startGame(): void {
     const e = split ? localKarts().reduce((a, b) => (Math.abs(b.speed) > Math.abs(a.speed) ? b : a), p) : p;
     audio.setEngine(Math.min(1.3, Math.abs(e.speed) / TUNING.maxSpeed), racing ? 1 : 0, e.boostT > 0, e.driftLevel, e.drift !== 0 && e.grounded, racing && !localKarts().every((k) => k.finished));
 
+    // Protector de temperatura (3 y 4 jugadores): si no llega a 60 fps ni con la resolución al mínimo, 30 fps estables.
+    if (mode === 'race' && heat.sample(dt, loop.frameMs, dynRes.targetMs, dynRes.atFloor)) {
+      loop.fpsLimit = raceFps();
+      dynRes.targetMs = 1000 / loop.fpsLimit;
+      hud.toast('🌡️ Modo fresco: 30 fps para que el equipo no se caliente', '#bfe6ff');
+    }
+
+    // En pausa (sin red) la imagen no cambia: se dibuja un par de veces y después el lienzo conserva la última.
+    pausedFrames = mode === 'paused' && !session.active ? pausedFrames + 1 : 0;
+    if (pausedFrames > 2) return;
+
     gpu.begin();
     if (splitView) {
       renderer.setScissorTest(true);
-      const views: [THREE.PerspectiveCamera, Kart, number, number][] = [
-        [camera, karts[0], H - topH, topH],
-        [camera2, karts[1], 0, H - topH],
-      ];
-      for (const [cam, k, y, h] of views) {
-        // La sombra sigue a cada kart en su vista.
-        followSun(stage, k.pos.x, k.pos.y, k.pos.z);
-        renderer.setViewport(0, y, W, h);
-        renderer.setScissor(0, y, W, h);
-        renderer.render(scene, cam);
-      }
+      // Sin mapa de sombras no hace falta mover el sol en cada vista (con sombras, sigue a cada kart en la suya).
+      const shadows = quality.shadowMap > 0;
+      rects.forEach(([x, y, w, h], i) => {
+        const k = locals[i];
+        if (shadows) followSun(stage, k.pos.x, k.pos.y, k.pos.z);
+        renderer.setViewport(x, y, w, h);
+        renderer.setScissor(x, y, w, h);
+        renderer.render(scene, cameras[i]);
+      });
       renderer.setScissorTest(false);
       renderer.setViewport(0, 0, W, H);
     } else renderer.render(scene, camera);
@@ -1168,13 +1216,20 @@ export function startGame(): void {
 
   showTitle();
   if (params.split && !touchOn) {
-    // Pruebas: `?split&autostart` empieza con teclado (jugador 1) y el mando 0 (jugador 2); `?split` abre la pantalla de unirse.
+    // Pruebas: `?split&autostart` empieza con teclado (jugador 1) y el mando 0 (jugador 2); `?split=4&autostart`, con
+    // teclado y los mandos 0, 1 y 2. `?split` abre la pantalla de unirse.
     if (params.autostart) {
-      const c2 = settings.p2.charIndex === setup.charIndex ? (setup.charIndex + 1) % CHARACTERS.length : settings.p2.charIndex;
-      startSplit([
-        { dev: 'kbd', charIndex: setup.charIndex, profile: settings.profile },
-        { dev: 'pad0', charIndex: c2, profile: settings.p2.profile },
-      ]);
+      // `?split=N&autostart`: teclado (jugador 1) y los mandos 0, 1, 2 (jugadores 2 a 4), cada uno con otro peluche.
+      const used = new Set([setup.charIndex]);
+      const players: SplitPlayer[] = [{ dev: 'kbd', charIndex: setup.charIndex, profile: settings.profile }];
+      for (let i = 1; i < params.splitPlayers; i++) {
+        const pr = settings.others[i - 1];
+        let c = pr.charIndex;
+        while (used.has(c)) c = (c + 1) % CHARACTERS.length;
+        used.add(c);
+        players.push({ dev: `pad${i - 1}`, charIndex: c, profile: pr.profile });
+      }
+      startSplit(players);
     } else openSplit();
   } else if (params.autostart) {
     if (setup.cup) startCup();
@@ -1224,8 +1279,9 @@ export function startGame(): void {
     /** Para las pruebas: empieza la pantalla dividida con esos dispositivos. */
     startSplit,
     pads,
-    chase2,
-    camera2,
+    chases,
+    cameras,
+    heat,
     input,
     loadTrack,
     camera,

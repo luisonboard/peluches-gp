@@ -74,10 +74,10 @@ puesto, vuelta, objeto y barra de poder. La carrera se ve en el computador. Para
 | `?perfil=peque\|normal` | Aplica un perfil al cargar |
 | `?track=cuarto\|bano\|jardin` | Pista al cargar |
 | `?copa` | Elige la copa de 3 carreras (con `?autostart`, empieza sola) |
-| `?split` | Abre la pantalla dividida para 2 jugadores (con `?autostart`, empieza con teclado + mando 0; con `?bench`, mide en pantalla dividida) |
+| `?split` | Abre la pantalla dividida (con `?autostart`, empieza con teclado + mando 0; con `?bench`, mide en pantalla dividida). `?split=3` o `?split=4`: con 3 o 4 jugadores (teclado + mandos 0, 1 y 2) |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
-| `?mando=ABCD` | Abre el teléfono como mando de la pantalla con ese código (lo usa el QR de «2 jugadores»; no carga el juego 3D) |
+| `?mando=ABCD` | Abre el teléfono como mando de la pantalla con ese código (lo usa el QR de «2–4 jugadores»; no carga el juego 3D) |
 | `?noaudio` | Sin audio |
 
 Errores en `window.__errors`; estado en `window.__game` (por ejemplo, `__game.TUNING` para ajustar la física en vivo).
@@ -320,6 +320,31 @@ el perfil y decir «listo», el teclado como jugador 2. En la carrera, Acelerar 
 su kart. La pausa desde el teléfono y «Seguir» con OK funcionan. Recargar el teléfono a media carrera lo devuelve
 como «Teléfono 1» a su kart. La versión compilada abre el mando sin cargar el juego. `window.__errors` vacío.
 Falta: la prueba con un iPhone y un Android reales (giroscopio, retraso por el relevo y vibración).
+
+**Pantalla dividida de 3 y 4 jugadores, con optimizaciones para que el equipo no se caliente** (fase 2):
+
+- El botón del título pasa a «👥 2–4 jugadores». En la pantalla de unirse hay cuatro puestos: cada jugador se une
+  con su teclado, mando o teléfono. Con cuatro listos empieza sola; con dos o tres, cuando todos están listos,
+  cualquiera vuelve a pulsar B / Enter (o «¡A correr!»), así un tercero o cuarto alcanza a unirse. Si alguien se
+  va, los de después suben un puesto. Ningún peluche se repite.
+- Ajustes por jugador: el jugador 1 usa los generales y los jugadores 2 a 4 los suyos (`settings.others`; los
+  ajustes viejos con `p2` se migran solos).
+- 3 y 4 jugadores: cuadrícula 2 × 2 (J1 y J2 arriba, J3 y J4 abajo), con su HUD en cada cuadrante (lo de la
+  columna derecha va pegado al borde derecho) y el minimapa pequeño en el centro. Con 3, el cuarto cuadrante no se
+  dibuja: lleva el minimapa grande. Colores de jugador: amarillo, celeste, rosa y verde.
+- Parrilla: los jugadores salen juntos, del 3.º puesto hacia atrás; la IA va delante.
+- Optimizaciones (cada vista vuelve a dibujar la escena entera, así que el costo crece con los jugadores):
+  - 2 jugadores: la calidad baja un nivel, como antes. 3 y 4: calidad Baja (sin mapa de sombras, que se tendría
+    que redibujar una vez por vista; sombras de mancha, menos partículas y decorado) y resolución hasta 1,25×.
+  - Sin mapa de sombras, el sol no se mueve en cada vista.
+  - **Protector de temperatura** (`HeatGuard`, 3 y 4 jugadores): si con la resolución dinámica al mínimo los
+    cuadros siguen llegando tarde durante 4 s, la carrera pasa a 30 fps estables y avisa con «🌡️ Modo fresco».
+    Al bajar a 30, la resolución dinámica puede volver a subir. Se reinicia al salir de la pantalla dividida.
+  - Pausa sin red: 30 fps y, tras dibujar la escena un par de veces, no se vuelve a dibujar (la imagen está
+    quieta). Resultados y podio a 30 fps.
+  - HUD: cada panel solo toca el DOM cuando algo cambia (posición, barra de poder, aviso de sentido contrario);
+    la tabla de resultados ya no se reescribe en cada cuadro, y con varios jugadores el minimapa se redibuja a
+    unos 30 fps.
 
 ### Mediciones (MacBook Pro M3 Pro, Chrome, 1280 × 720, `?bench`, hito 2)
 

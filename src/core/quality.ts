@@ -34,6 +34,8 @@ export function detectQuality(forced: string | null): Quality {
   return { ...(isMobile() ? PRESETS.low : PRESETS.medium) };
 }
 
+const MIN_SCALE = 0.6;
+
 /** Baja la resolución si los cuadros llegan tarde y la sube con cautela cuando sobra tiempo. */
 export class DynamicResolution {
   scale = 1;
@@ -48,6 +50,11 @@ export class DynamicResolution {
 
   get pixelRatio(): number {
     return Math.max(0.5, this.base * this.scale);
+  }
+
+  /** La resolución ya está en su mínimo (no puede bajar más para ganar tiempo). */
+  get atFloor(): boolean {
+    return this.scale <= MIN_SCALE + 1e-6;
   }
 
   /** Cambia el tope de resolución (al cambiar de calidad). */
@@ -69,8 +76,8 @@ export class DynamicResolution {
     if (this.timer < 1) return;
     const avg = this.acc / this.n;
     this.acc = this.n = this.timer = 0;
-    if (avg > this.targetMs * 1.2 && this.scale > 0.6) {
-      this.scale = Math.max(0.6, this.scale - 0.1);
+    if (avg > this.targetMs * 1.2 && this.scale > MIN_SCALE) {
+      this.scale = Math.max(MIN_SCALE, this.scale - 0.1);
       this.apply();
       this.cooldown = 4;
     } else if (avg < this.targetMs * 1.06 && this.scale < 1 && this.cooldown <= 0) {
@@ -78,6 +85,34 @@ export class DynamicResolution {
       this.apply();
       this.cooldown = 3;
     }
+  }
+}
+
+/**
+ * Protector de temperatura para la pantalla dividida de 3 y 4 jugadores: si con la resolución al mínimo los cuadros
+ * siguen llegando tarde durante unos segundos, el equipo está al límite (y se calienta). Entonces conviene pasar a
+ * 30 fps estables, que se ven mejor que 40–50 fps irregulares y gastan la mitad.
+ */
+export class HeatGuard {
+  enabled = false;
+  /** Ya pasó a 30 fps (no vuelve a subir hasta salir de la pantalla dividida). */
+  tripped = false;
+  private slowT = 0;
+
+  reset(enabled: boolean): void {
+    this.enabled = enabled;
+    this.tripped = false;
+    this.slowT = 0;
+  }
+
+  /** Devuelve true en el cuadro en que decide bajar a 30 fps. */
+  sample(dt: number, frameMs: number, targetMs: number, atFloor: boolean): boolean {
+    if (!this.enabled || this.tripped) return false;
+    if (atFloor && frameMs > targetMs * 1.18) this.slowT += dt;
+    else this.slowT = Math.max(0, this.slowT - dt * 2);
+    if (this.slowT < 4) return false;
+    this.tripped = true;
+    return true;
   }
 }
 

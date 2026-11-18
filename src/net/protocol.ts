@@ -111,7 +111,7 @@ export interface PadState {
   peque?: boolean;
   /** Texto de ayuda o de error. */
   note?: string;
-  /** Fuera de «2 jugadores»: puede elegirse como mando del jugador 1 (botón «Usar como mando»). */
+  /** Fuera de «2–4 jugadores»: puede elegirse como mando del jugador 1 (botón «Usar como mando»). */
   canSolo?: boolean;
   /** Es el mando del jugador 1 en partidas de 1 jugador (botón «Dejar de usarlo»). */
   solo?: boolean;

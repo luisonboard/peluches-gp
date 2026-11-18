@@ -1,10 +1,11 @@
-// Pantalla dividida: "Pulsa un botón para unirte". Cada jugador se une con su dispositivo (teclado o mando) y con
-// ese mismo dispositivo elige peluche (◀ ▶), perfil (▲ ▼) y dice "listo" (B / Enter). Con los dos listos, empieza.
+// Pantalla dividida: "Pulsa un botón para unirte". De 2 a 4 jugadores: cada uno se une con su dispositivo (teclado o
+// mando) y con ese mismo dispositivo elige peluche (◀ ▶), perfil (▲ ▼) y dice "listo" (B / Enter). Con cuatro listos
+// empieza sola; con dos o tres, cuando todos están listos, cualquiera vuelve a pulsar B / Enter (o «¡A correr!»).
 // Un teléfono también sirve de mando: se escanea el QR y se pulsa «¡Unirme!» en él (ver net/pad.ts y pad/phone.ts).
 import { phoneQrBox, watchPhoneUrl } from './phoneQr';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
 import type { DeviceId, MenuEvent } from '../input/input';
-import type { Profile } from '../core/settings';
+import { MAX_LOCAL, type Profile } from '../core/settings';
 import { LOCAL_COLORS } from './hud';
 
 export interface SplitPlayer {
@@ -15,22 +16,25 @@ export interface SplitPlayer {
 
 export interface SplitDeps {
   /** Peluche y perfil guardados de cada jugador (al unirse empiezan así). */
-  saved: [{ charIndex: number; profile: Profile }, { charIndex: number; profile: Profile }];
+  saved: { charIndex: number; profile: Profile }[];
   /** Qué se va a correr ("Cuarto de Juegos · 3 vueltas · rivales Fácil"). */
   summary: string;
   deviceName: (dev: DeviceId) => string;
   /** Dirección para abrir el mando en un teléfono (se resuelve cuando la sala de mandos está abierta). */
   phoneUrl: Promise<{ url: string; code: string }>;
-  onStart: (players: [SplitPlayer, SplitPlayer]) => void;
+  onStart: (players: SplitPlayer[]) => void;
   onBack: () => void;
 }
 
 const CSS = `
-.pgp-split { width: min(760px, 100%); }
+.pgp-split { width: min(980px, 100%); }
 .pgp-split h2 { margin: 0 0 2px; text-align: center; font-size: 30px; }
 .pgp-split .sum { text-align: center; color: #6a64a0; font-weight: 800; margin-bottom: 12px; }
-.pgp-split .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 560px) { .pgp-split .cols { grid-template-columns: 1fr; } }
+.pgp-split .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .pgp-split .cols { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 420px) { .pgp-split .cols { grid-template-columns: 1fr; } }
+.pgp-split .col.empty { opacity: .8; }
+.pgp-split .allready { text-align: center; font-weight: 900; font-size: 18px; color: #2f9a4a; margin-top: 10px; animation: pgp-blink 1.2s steps(2) infinite; }
 .pgp-split .col { border-radius: 22px; background: #f1effa; padding: 12px; display: grid; gap: 8px; justify-items: center; align-content: start;
   min-height: 210px; border: 4px solid transparent; min-width: 0; }
 .pgp-split .col.ready { border-color: #3fb24a; background: #ecfbe9; }
@@ -56,6 +60,9 @@ const CSS = `
   .pgp-split h2 { font-size: 22px; }
   .pgp-split .sum { margin-bottom: 6px; font-size: 13px; }
   .pgp-split .col { min-height: 0; padding: 8px; gap: 4px; }
+  .pgp-split .who { font-size: 17px; }
+  .pgp-split .wait { margin-top: 4px; font-size: 15px; }
+  .pgp-split .keys, .pgp-split .state { font-size: 11px; }
   .pgp-split .face { width: 40px; height: 40px; border-radius: 14px; }
   .pgp-split .face::before, .pgp-split .face::after { top: 13px; width: 8px; height: 9px; }
   .pgp-split .face::before { left: 8px } .pgp-split .face::after { right: 8px }
@@ -90,7 +97,7 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
     document.head.append(st);
     styled = true;
   }
-  const slots: (Slot | null)[] = [null, null];
+  const slots: (Slot | null)[] = Array.from({ length: MAX_LOCAL }, () => null);
   const screen = document.createElement('div');
   screen.className = 'pgp-screen dim';
   const card = document.createElement('div');
@@ -98,13 +105,14 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
   screen.append(card);
   document.body.append(screen);
 
-  const taken = (i: number): number => slots[1 - i]?.charIndex ?? -1;
+  /** ¿Otro jugador ya tiene ese peluche? */
+  const taken = (i: number, c: number): boolean => slots.some((s, j) => j !== i && s?.charIndex === c);
   const stepChar = (i: number, dir: number): void => {
     const s = slots[i];
     if (!s) return;
     let c = s.charIndex;
     do c = (c + dir + CHARACTERS.length) % CHARACTERS.length;
-    while (c === taken(i));
+    while (taken(i, c));
     s.charIndex = c;
     s.ready = false;
   };
@@ -112,16 +120,19 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
     if (slots.some((s) => s?.dev === dev)) return;
     const i = slots.indexOf(null);
     if (i < 0) return;
-    const saved = d.saved[i];
+    const saved = d.saved[i] ?? { charIndex: 0, profile: 'normal' };
     const s: Slot = { dev, charIndex: saved.charIndex, profile: saved.profile, ready: false };
     slots[i] = s;
-    if (s.charIndex === taken(i)) stepChar(i, 1);
+    if (taken(i, s.charIndex)) stepChar(i, 1);
   };
-  const both = (): boolean => !!slots[0] && !!slots[1];
+  /** Jugadores unidos, en orden (sin huecos: si se va el 2, el 3 pasa a ser el 2). */
+  const joined = (): Slot[] => slots.filter((s): s is Slot => !!s);
+  const enough = (): boolean => joined().length >= 2;
+  const allReady = (): boolean => enough() && joined().every((s) => s.ready);
   const start = (): void => {
-    if (!both()) return;
+    if (!enough()) return;
     close();
-    d.onStart(slots.map((s) => ({ dev: s!.dev, charIndex: s!.charIndex, profile: s!.profile })) as [SplitPlayer, SplitPlayer]);
+    d.onStart(joined().map((s) => ({ dev: s.dev, charIndex: s.charIndex, profile: s.profile })));
   };
   let closed = false;
   const close = (): void => {
@@ -142,15 +153,16 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
   const phone = watchPhoneUrl(d.phoneUrl, () => !closed && render());
   const render = (): void => {
     card.replaceChildren();
-    card.append(el('h2', '', '👥 2 jugadores'), el('div', 'sum', d.summary));
+    const n = joined().length;
+    card.append(el('h2', '', `👥 ${Math.max(2, n)} jugadores`), el('div', 'sum', `${d.summary} · de 2 a ${MAX_LOCAL} jugadores`));
     const cols = el('div', 'cols');
     slots.forEach((s, i) => {
-      const col = el('div', `col${s?.ready ? ' ready' : ''}`);
+      const col = el('div', `col${s?.ready ? ' ready' : ''}${s ? '' : ' empty'}`);
       const who = el('div', 'who', `Jugador ${i + 1}`);
       who.style.color = LOCAL_COLORS[i];
       col.append(who);
       if (!s) {
-        col.append(el('div', 'wait', 'Pulsa un botón para unirte'), el('div', 'keys', i === 0 ? 'Mando: B · Teclado: Enter' : 'Con otro mando (B) o con el teclado (Enter)'));
+        col.append(el('div', 'wait', 'Pulsa un botón para unirte'), el('div', 'keys', i === 0 ? 'Mando: B · Teclado: Enter' : 'Con otro mando (B), un teléfono o el teclado (Enter)'));
       } else {
         col.append(el('div', 'dev', d.deviceName(s.dev)));
         const ch = CHARACTERS[s.charIndex];
@@ -179,10 +191,11 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
       cols.append(col);
     });
     card.append(cols);
-    if (!both()) card.append(phoneQrBox(phone, '📱 ¿Sin mando? Usa un teléfono', 'Escanea el QR y toca «¡Unirme!» en el teléfono.'));
+    if (allReady()) card.append(el('div', 'allready', '¡Todos listos! Pulsa B / Enter otra vez para correr'));
+    if (n < MAX_LOCAL) card.append(phoneQrBox(phone, '📱 ¿Sin mando? Usa un teléfono', 'Escanea el QR y toca «¡Unirme!» en el teléfono.'));
     const btns = el('div', 'btns');
     const go = el('button', 'pgp-go', '¡A correr!') as HTMLButtonElement;
-    go.disabled = !both();
+    go.disabled = !enough();
     go.onclick = start;
     const bk = el('button', 'pgp-go alt', 'Volver');
     bk.onclick = back;
@@ -198,7 +211,7 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
       const s = slots[i];
       if (!s) {
         if (key === 'ok') join(dev);
-        else if (key === 'back' && !slots[0] && !slots[1]) return back();
+        else if (key === 'back' && !joined().length) return back();
         continue;
       }
       if (key === 'left' || key === 'right') stepChar(i, key === 'left' ? -1 : 1);
@@ -206,11 +219,17 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
         s.profile = s.profile === 'peque' ? 'normal' : 'peque';
         s.ready = false;
       } else if (key === 'ok') {
+        // Ya listo y todos listos: vuelve a pulsar para salir (así un 3.º o 4.º jugador alcanza a unirse).
+        if (s.ready && allReady()) return start();
         s.ready = true;
-        if (slots.every((x) => x?.ready)) return start();
+        if (joined().length === MAX_LOCAL && allReady()) return start();
       } else if (key === 'back') {
         if (s.ready) s.ready = false;
-        else slots[i] = null;
+        else {
+          // Se va: los de después suben un puesto (no quedan huecos entre jugadores).
+          slots.splice(i, 1);
+          slots.push(null);
+        }
       }
     }
     if (!closed) render();

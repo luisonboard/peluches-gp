@@ -195,6 +195,35 @@ const CSS = `
 #hud.split .hud-tag { display: block; position: absolute; right: calc(clamp(96px, 19vh, 150px) + 28px); bottom: 12px; font-size: clamp(18px, 3.4vh, 28px);
   font-weight: 900; line-height: 1; }
 #hud.split .hud-panel.p2 .hud-tag { bottom: 12px; }
+/* 3 y 4 jugadores: cuadrícula 2 × 2 (J1 J2 arriba, J3 J4 abajo). Con 3, el cuarto cuadrante lleva el minimapa grande. */
+#hud .hud-split-v, #hud .hud-fill { display: none; }
+#hud.quad .hud-panel { right: 50%; bottom: 50%; }
+#hud.quad .hud-panel.p2 { left: 50%; right: 0; top: 0; bottom: 50%; }
+#hud.quad .hud-panel.p3 { left: 0; right: 50%; top: 50%; bottom: 0; }
+#hud.quad .hud-panel.p4 { left: 50%; right: 0; top: 50%; bottom: 0; }
+#hud.quad .hud-split-line { display: block; position: absolute; left: 0; right: 0; top: 50%; height: 6px; margin-top: -3px; background: #2a2050; }
+#hud.quad .hud-split-v { display: block; position: absolute; top: 0; bottom: 0; left: 50%; width: 6px; margin-left: -3px; background: #2a2050; }
+#hud.quad.trio .hud-fill { display: block; position: absolute; left: 50%; top: 50%; right: 0; bottom: 0;
+  background: radial-gradient(circle at 50% 50%, #3a2f78 0, #2a2050 70%); }
+#hud.quad #hud-map { top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); width: clamp(72px, 13vh, 112px); height: clamp(72px, 13vh, 112px); }
+#hud.quad.trio #hud-map { top: 75%; left: 75%; width: clamp(120px, 36vh, 280px); height: clamp(120px, 36vh, 280px); }
+#hud.quad .hud-pos { font-size: clamp(36px, 7.5vh, 70px); bottom: 10px; }
+#hud.quad .hud-lap { font-size: clamp(15px, 2.9vh, 24px); top: 10px; }
+#hud.quad .hud-panel.p2 .hud-pos, #hud.quad .hud-panel.p4 .hud-pos { left: auto; right: max(18px, env(safe-area-inset-right)); }
+#hud.quad .hud-panel.p2 .hud-lap, #hud.quad .hud-panel.p4 .hud-lap { left: auto; right: max(18px, env(safe-area-inset-right)); text-align: right; }
+#hud.quad .hud-panel.p3 .hud-lap, #hud.quad .hud-panel.p4 .hud-lap, #hud.quad .hud-panel.p3 .hud-item, #hud.quad .hud-panel.p4 .hud-item { top: 14px; }
+#hud.quad .hud-msg { top: 26%; font-size: clamp(36px, 9vh, 84px); }
+#hud.quad .hud-msg.small { font-size: clamp(20px, 4.4vh, 38px); }
+#hud.quad .hud-wrong { top: 40%; font-size: clamp(18px, 3.6vh, 30px); }
+#hud.quad .hud-toast { top: 58%; font-size: clamp(15px, 3vh, 26px); }
+#hud.quad .hud-item { top: 10px; gap: 4px; }
+#hud.quad .hud-item .slot { width: clamp(40px, 7.5vh, 60px); height: clamp(40px, 7.5vh, 60px); border-radius: 16px; border-width: 4px; }
+#hud.quad .hud-power { width: clamp(96px, 17vh, 150px); }
+#hud.quad .hud-power .lbl { font-size: 10px; }
+#hud.quad .hud-tag { display: block; position: absolute; left: max(18px, env(safe-area-inset-left)); top: calc(16px + clamp(15px, 2.9vh, 24px) * 2.4);
+  font-size: clamp(14px, 2.8vh, 22px); font-weight: 900; line-height: 1; }
+#hud.quad .hud-panel.p3 .hud-tag, #hud.quad .hud-panel.p4 .hud-tag { top: calc(20px + clamp(15px, 2.9vh, 24px) * 2.4); }
+#hud.quad .hud-panel.p2 .hud-tag, #hud.quad .hud-panel.p4 .hud-tag { left: auto; right: max(18px, env(safe-area-inset-right)); }
 #pgp-bench { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; background: rgba(20,18,50,.9); color: #fff;
   font: 600 14px/1.5 ui-monospace, Menlo, monospace; padding: 10px 14px; border-radius: 12px; white-space: pre; pointer-events: none; }
 `;
@@ -222,8 +251,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''):
   return e;
 }
 
-/** Color de cada jugador de este dispositivo (anillo del minimapa y etiqueta J1/J2). */
-export const LOCAL_COLORS = ['#ffd23a', '#4ad8ff'];
+/** Color de cada jugador de este dispositivo (anillo del minimapa y etiqueta J1…J4). */
+export const LOCAL_COLORS = ['#ffd23a', '#4ad8ff', '#ff7ad0', '#8cf26a'];
 
 /** Lo que ve cada jugador en su mitad: posición, vuelta, objeto, poder y avisos. */
 class HudPanel {
@@ -242,6 +271,10 @@ class HudPanel {
   private shownItem = '';
   private lastLapHtml = '';
   private lastTag = '';
+  private lastPos = '';
+  private lastPct = -1;
+  private lastPowerColor = '';
+  private lastReady = false;
   private rouletteIdx = 0;
 
   constructor(n: number) {
@@ -291,11 +324,13 @@ class HudPanel {
       }
     }
     this.shownItem = key;
+    // Solo se toca el DOM cuando algo cambia: con cuatro paneles, escribir estilos en cada cuadro cuesta.
     const pct = Math.round(p.power * 100);
-    this.powerFill.style.width = `${pct}%`;
-    this.powerFill.style.background = cssColor(p.char.color);
+    if (pct !== this.lastPct) this.powerFill.style.width = `${(this.lastPct = pct)}%`;
+    const pc = cssColor(p.char.color);
+    if (pc !== this.lastPowerColor) this.powerFill.style.background = this.lastPowerColor = pc;
     const ready = p.power >= 1;
-    this.powerBar.classList.toggle('ready', ready);
+    if (ready !== this.lastReady) this.powerBar.classList.toggle('ready', (this.lastReady = ready));
     const lbl = ready ? (touchMode || split ? `¡${p.char.power}!` : `¡${p.char.power}! (E · X)`) : p.char.power;
     if (this.powerLbl.textContent !== lbl) this.powerLbl.textContent = lbl;
   }
@@ -303,12 +338,16 @@ class HudPanel {
   update(race: Race, p: Kart, touchMode: boolean, split: boolean): void {
     this.updateItem(p, touchMode, split);
     const total = race.karts.length;
-    this.pos.innerHTML = `${ordinal(p.position)}<small>/${total}</small>`;
-    this.pos.style.color = ['#ffd23a', '#e6e9f2', '#f0a36a'][p.position - 1] ?? '#ffffff';
+    const posHtml = `${ordinal(p.position)}<small>/${total}</small>`;
+    if (posHtml !== this.lastPos) {
+      this.pos.innerHTML = this.lastPos = posHtml;
+      this.pos.style.color = ['#ffd23a', '#e6e9f2', '#f0a36a'][p.position - 1] ?? '#ffffff';
+    }
     const lap = Math.max(1, Math.min(race.laps, p.lap));
     const html = `Vuelta ${lap}/${race.laps}<br><span class="time">${fmtTime(p.finished ? p.finishTime : race.time)}</span>`;
     if (html !== this.lastLapHtml) this.lap.innerHTML = this.lastLapHtml = html;
-    this.wrong.style.display = p.wrongWayT > 1 && !p.finished && race.phase === 'racing' ? '' : 'none';
+    const wrong = p.wrongWayT > 1 && !p.finished && race.phase === 'racing' ? '' : 'none';
+    if (this.wrong.style.display !== wrong) this.wrong.style.display = wrong;
     const tag = split ? `J${p.localNo + 1} · ${p.name}` : '';
     if (tag !== this.lastTag) {
       this.tag.textContent = this.lastTag = tag;
@@ -317,7 +356,7 @@ class HudPanel {
   }
 }
 
-/** Etiqueta del kart en las tablas: "(tú)" con un jugador; "(J1)"/"(J2)" en pantalla dividida. */
+/** Etiqueta del kart en las tablas: "(tú)" con un jugador; "(J1)"…"(J4)" en pantalla dividida. */
 function youTag(localNo: number, split: boolean): string {
   if (localNo < 0) return '';
   return split ? ` (J${localNo + 1})` : ' (tú)';
@@ -327,6 +366,11 @@ export class Hud {
   private root = el('div');
   private panels: HudPanel[] = [new HudPanel(0)];
   private splitLine = el('div', 'hud-split-line');
+  private splitV = el('div', 'hud-split-v');
+  /** Cuarto cuadrante vacío con 3 jugadores (lleva el minimapa grande). */
+  private fill = el('div', 'hud-fill');
+  private players = 1;
+  private lastMapAt = 0;
   private map = el('canvas');
   private mapCtx: CanvasRenderingContext2D;
   private mapPath: Path2D | null = null;
@@ -349,32 +393,37 @@ export class Hud {
     this.map.width = this.map.height = 380;
     this.mapCtx = this.map.getContext('2d')!;
     this.flashEl.id = 'hud-flash';
-    this.root.append(this.panels[0].root, this.splitLine, this.map);
+    this.root.append(this.panels[0].root, this.fill, this.splitLine, this.splitV, this.map);
     document.body.append(this.flashEl);
     document.body.append(this.root);
     this.setRaceVisible(false);
   }
 
-  /** Uno o dos jugadores en esta pantalla (dos = pantalla dividida, arriba y abajo). */
-  setPlayers(n: 1 | 2): void {
-    if (n === 2 && this.panels.length < 2) {
-      this.panels.push(new HudPanel(1));
-      this.root.insertBefore(this.panels[1].root, this.splitLine);
+  /** Jugadores en esta pantalla: 1; 2 = arriba y abajo; 3 o 4 = cuadrícula 2 × 2. */
+  setPlayers(n: number): void {
+    n = Math.max(1, Math.min(4, Math.round(n)));
+    while (this.panels.length < n) {
+      const p = new HudPanel(this.panels.length);
+      this.panels.push(p);
+      this.root.insertBefore(p.root, this.fill);
     }
-    this.panels[1]?.root.style.setProperty('display', n === 2 ? '' : 'none');
+    this.panels.forEach((p, i) => p.root.style.setProperty('display', i < n ? '' : 'none'));
+    this.players = n;
     this.root.classList.toggle('split', n === 2);
+    this.root.classList.toggle('quad', n >= 3);
+    this.root.classList.toggle('trio', n === 3);
     this.setRaceVisible(this.raceVisible);
   }
 
   private get active(): HudPanel[] {
-    return this.root.classList.contains('split') ? this.panels : this.panels.slice(0, 1);
+    return this.panels.slice(0, this.players);
   }
 
   setRaceVisible(v: boolean): void {
     this.raceVisible = v;
     this.map.style.display = v ? '' : 'none';
     this.panels.forEach((p) => p.setRaceVisible(v));
-    this.splitLine.style.visibility = v ? '' : 'hidden';
+    this.splitLine.style.visibility = this.splitV.style.visibility = this.fill.style.visibility = v ? '' : 'hidden';
   }
 
   setTrack(track: Track): void {
@@ -423,7 +472,12 @@ export class Hud {
   update(race: Race): void {
     const split = race.pilots.length > 1;
     race.pilots.forEach((pl, i) => this.panels[i]?.update(race, pl.kart, this.touchMode, split));
-    this.drawMap(race);
+    // Con varios jugadores, el minimapa se redibuja a unos 30 cuadros por segundo (se nota igual y cuesta la mitad).
+    const now = performance.now();
+    if (!split || now - this.lastMapAt > 30) {
+      this.lastMapAt = now;
+      this.drawMap(race);
+    }
   }
 
   private drawMap(race: Race): void {
@@ -587,13 +641,13 @@ export class Hud {
     goRow.append(go, online);
     if (onSplit) {
       // Pantalla dividida: solo en computador o tablet con mandos (no en el teléfono).
-      const sp = el('button', 'pgp-go', '👥 2 jugadores');
+      const sp = el('button', 'pgp-go', '👥 2–4 jugadores');
       sp.style.cssText = 'margin:0;background:#ff9a2a;box-shadow:0 7px 0 #c26a10;font-size:20px;padding:12px 22px';
       sp.onclick = () => onSplit();
       goRow.append(sp);
     }
     if (onPhone) {
-      // Teléfono como mando para 1 jugador (QR); en «2 jugadores» el QR ya está en la pantalla de unirse.
+      // Teléfono como mando para 1 jugador (QR); en «2–4 jugadores» el QR ya está en la pantalla de unirse.
       const ph = el('button', 'pgp-go', '📱 Mando');
       ph.title = 'Usar un teléfono como mando';
       ph.style.cssText = 'margin:0;background:#1fa59a;box-shadow:0 7px 0 #137168;font-size:20px;padding:12px 22px';
@@ -709,7 +763,7 @@ export class Hud {
     card.style.width = 'min(560px, 100%)';
     let title: string;
     if (race.pilots.length > 1) {
-      // Pantalla dividida: el título habla del mejor de los dos.
+      // Pantalla dividida: el título habla del mejor de los jugadores.
       const best = race.pilots.map((pl) => pl.kart).sort((a, b) => (a.place || 99) - (b.place || 99))[0];
       title = best.place === 1 ? `¡Ganó ${best.name}! 🏆` : best.place <= 3 ? `¡${best.name}, ${ordinal(best.place)} lugar! 🎉` : 'Carrera terminada';
     } else {
@@ -734,6 +788,7 @@ export class Hud {
     this.focus = 0;
     this.menuInput([]);
     this.resultsTable = table;
+    this.resultsHtml = '';
     this.refreshResults(race);
   }
 
@@ -786,16 +841,19 @@ export class Hud {
   }
 
   private resultsTable: HTMLTableElement | null = null;
+  private resultsHtml = '';
 
+  /** Se llama en cada cuadro de los resultados: solo reescribe la tabla si cambió. */
   refreshResults(race: Race): void {
     if (!this.resultsTable) return;
-    this.resultsTable.innerHTML = race.order
+    const html = race.order
       .map(
         (k) => `<tr class="${k.localNo >= 0 ? 'me' : ''}"><td>${k.finished ? ordinal(k.place) : '…'}</td>
         <td><span class="dot" style="background:${cssColor(k.char.kart)}"></span>${k.name}${youTag(k.localNo, race.pilots.length > 1)}</td>
         <td style="text-align:right">${k.finished ? fmtTime(k.finishTime) : 'en carrera'}</td></tr>`,
       )
       .join('');
+    if (html !== this.resultsHtml) this.resultsTable.innerHTML = this.resultsHtml = html;
   }
 
   bench(text: string): void {

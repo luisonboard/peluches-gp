@@ -25,11 +25,19 @@ export const CPU_LEVELS: CpuLevel[] = [
   { id: 'dificil', label: 'Difícil', speed: 1.0, driftSkill: 1, startBoost: 0.75 },
 ];
 
-/** Orden de la parrilla: el jugador sale en 4.º lugar (con dos jugadores, 3.º y 4.º, uno al lado del otro). */
-const GRID_SLOT_OF_KART = [3, 0, 1, 2, 4, 5];
-const GRID_SLOT_SPLIT = [3, 2, 0, 1, 4, 5];
+/**
+ * Orden de la parrilla por número de jugadores de este dispositivo (índice del kart → puesto de salida).
+ * Un jugador sale 4.º; dos, 3.º y 4.º, uno al lado del otro; tres, del 3.º al 5.º; cuatro, del 3.º al 6.º.
+ * La IA ocupa los puestos de delante.
+ */
+const GRID_SLOTS: Record<number, number[]> = {
+  1: [3, 0, 1, 2, 4, 5],
+  2: [3, 2, 0, 1, 4, 5],
+  3: [2, 3, 4, 0, 1, 5],
+  4: [2, 3, 4, 5, 0, 1],
+};
 
-/** Un jugador de este dispositivo y sus ayudas (en pantalla dividida hay dos). */
+/** Un jugador de este dispositivo y sus ayudas (en pantalla dividida, de dos a cuatro). */
 export interface Pilot {
   kart: Kart;
   assist: AssistOpts;
@@ -85,8 +93,8 @@ export class Race {
 
   placeOnGrid(): void {
     const tr = this.karts[0].track;
+    const table = GRID_SLOTS[this.karts.filter((x) => x.isPlayer).length] ?? GRID_SLOTS[1];
     this.karts.forEach((k, n) => {
-      const table = this.karts[1]?.isPlayer ? GRID_SLOT_SPLIT : GRID_SLOT_OF_KART;
       const slot = this.gridBySlot ? k.slot : table[n] ?? n;
       const row = Math.floor(slot / 2);
       const col = slot % 2;
@@ -194,7 +202,7 @@ export class Race {
     this.order.forEach((k, i) => (k.position = i + 1));
 
     // Ayuda a rezagados: la IA acelera un poco si va detrás del jugador y afloja si va muy por delante.
-    // Con dos jugadores, la referencia es el promedio de los dos.
+    // Con varios jugadores, la referencia es el promedio de todos.
     const N = this.player.track.N;
     const ref = this.pilots.reduce((a, p) => a + p.kart.progress, 0) / this.pilots.length;
     for (const k of this.karts) {

@@ -1,4 +1,4 @@
-// Recuadro con el QR para usar un teléfono como mando (lo usan «2 jugadores» y el panel 📱 Mando del título).
+// Recuadro con el QR para usar un teléfono como mando (lo usan «2–4 jugadores» y el panel 📱 Mando del título).
 import qrcode from 'qrcode-generator';
 
 const CSS = `
