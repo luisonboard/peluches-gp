@@ -1,6 +1,7 @@
 // Pantalla de Ajustes: perfil, ayuda de manejo, voz, volante (botones o giroscopio), nombres y prueba del mando.
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
-import { applyProfile, type Settings, type Profile, type SteerMode, type GyroSens } from '../core/settings';
+import { applyProfile, profileAssist, type Settings, type PlayerPrefs, type Profile, type SteerMode, type GyroSens } from '../core/settings';
+import { LOCAL_COLORS } from './hud';
 import type { Gyro } from '../input/gyro';
 import { installState, promptInstall } from '../pwa';
 
@@ -24,6 +25,9 @@ const CSS = `
 .pgp-set .names input { min-width: 0; width: 100%; border: 2px solid #d8d4ee; border-radius: 10px; padding: 6px 8px; font: inherit; font-weight: 800;
   font-size: 16px; color: #2a2050; background: #fff; -webkit-user-select: text; user-select: text; }
 .pgp-set .pad { font: 600 13px/1.4 ui-monospace, Menlo, monospace; background: #f1effa; border-radius: 10px; padding: 8px 10px; color: #2a2050; white-space: pre-line; }
+.pgp-set .who { justify-content: center; margin-bottom: 4px; }
+.pgp-set .who .pgp-opt { border-color: var(--c); }
+.pgp-set .who .pgp-opt.sel { background: var(--c); color: #2a2050; border-color: #2a2050; }
 .pgp-set .tilt { font-weight: 800; color: #2a2050; font-variant-numeric: tabular-nums; }
 `;
 
@@ -35,6 +39,8 @@ export interface SettingsDeps {
   padInfo: () => string;
   onChange: (s: Settings) => void;
   onClose: () => void;
+  /** Jugadores en pantalla dividida (1 si no): cada uno elige su perfil y su ayuda de manejo. */
+  players?: number;
 }
 
 /** Abre Ajustes encima de lo que haya. Devuelve una función para cerrarlo. */
@@ -54,6 +60,9 @@ export function openSettings(d: SettingsDeps): () => void {
   screen.append(card);
   document.body.append(screen);
   let timer = 0;
+  const players = Math.max(1, Math.min(d.players ?? 1, 1 + s.others.length));
+  /** Jugador cuyos ajustes propios (perfil y ayuda de manejo) se ven: 0 es el jugador 1. */
+  let who = 0;
 
   const changed = (): void => {
     d.onChange(s);
@@ -98,14 +107,45 @@ export function openSettings(d: SettingsDeps): () => void {
 
   function render(): void {
     card.innerHTML = '<h2>Ajustes</h2>';
-    card.append(h('Perfil'));
-    card.append(opt<Profile>(s.profile, [['peque', 'Peque (5 años)'], ['normal', 'Normal']], (v) => applyProfile(s, v)));
-    card.append(note('Peque: ayuda de manejo, rivales en Fácil, golpes más cortos, un solo botón para objeto y poder, y voz.'));
+    if (players > 1) {
+      // Pantalla dividida: el perfil y la ayuda de manejo son de cada jugador (el 1 usa los ajustes generales).
+      const row = document.createElement('div');
+      row.className = 'row who';
+      for (let i = 0; i < players; i++) {
+        const b = document.createElement('button');
+        b.className = `pgp-opt${i === who ? ' sel' : ''}`;
+        b.style.setProperty('--c', LOCAL_COLORS[i]);
+        b.textContent = `Jugador ${i + 1}`;
+        b.onclick = () => {
+          who = i;
+          render();
+        };
+        row.append(b);
+      }
+      card.append(row);
+    }
+    const pp: PlayerPrefs = who === 0 ? s : s.others[who - 1];
+    const suffix = players > 1 ? ` · Jugador ${who + 1}` : '';
+    card.append(h(`Perfil${suffix}`));
+    card.append(
+      opt<Profile>(pp.profile, [['peque', 'Peque (5 años)'], ['normal', 'Normal']], (v) => {
+        if (who === 0) applyProfile(s, v);
+        else Object.assign(pp, { profile: v, ...profileAssist(v) });
+      }),
+    );
+    card.append(
+      note(
+        who === 0
+          ? 'Peque: ayuda de manejo, rivales en Fácil, golpes más cortos, un solo botón para objeto y poder, y voz.'
+          : 'Peque: ayuda de manejo, golpes más cortos y un solo botón para objeto y poder.',
+      ),
+    );
 
-    card.append(h('Ayuda de manejo'));
-    card.append(tog(s.autoAccel, 'Aceleración automática', 'El kart acelera solo; solo hay que girar.', (v) => (s.autoAccel = v)));
-    card.append(tog(s.smartSteer, 'Dirección asistida', 'Evita chocar y salirse. Una estrella brilla detrás del kart.', (v) => (s.smartSteer = v)));
-    card.append(tog(s.autoPower, 'Poder automático', 'Usa el poder del peluche cuando conviene.', (v) => (s.autoPower = v)));
+    card.append(h(`Ayuda de manejo${suffix}`));
+    card.append(tog(pp.autoAccel, 'Aceleración automática', 'El kart acelera solo; solo hay que girar.', (v) => (pp.autoAccel = v)));
+    card.append(tog(pp.smartSteer, 'Dirección asistida', 'Evita chocar y salirse. Una estrella brilla detrás del kart.', (v) => (pp.smartSteer = v)));
+    card.append(tog(pp.autoPower, 'Poder automático', 'Usa el poder del peluche cuando conviene.', (v) => (pp.autoPower = v)));
+    if (players > 1) card.append(h('Para todos'));
     card.append(tog(s.voice, 'Voz', 'Dice "¡Tres, dos, uno, ya!" y avisa la última vuelta.', (v) => (s.voice = v)));
     card.append(h('Sonido'));
     card.append(tog(s.music, 'Música', 'Música alegre en los menús y en la carrera.', (v) => (s.music = v)));

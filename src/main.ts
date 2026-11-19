@@ -341,6 +341,7 @@ export function startGame(): void {
       settings,
       gyro,
       padInfo: () => input.padInfo(),
+      players: split?.devs.length ?? 1,
       onChange: () => {
         saveSettings(settings);
         const lv = CPU_LEVELS.find((l) => l.id === settings.cpu);
