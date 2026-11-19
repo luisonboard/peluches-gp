@@ -182,6 +182,9 @@ export class AIDriver {
           case 'zorro':
             use = straight || k.position >= 3;
             break;
+          case 'nieve':
+            use = ctx.order.some((o) => o !== k && !o.finished && Math.hypot(o.pos.x - k.pos.x, o.pos.z - k.pos.z) < 9) || (!!ahead && gapTo(ahead) < 26);
+            break;
           case 'dino':
             use = near || ctx.gums.some((g) => Math.hypot(g.x - k.pos.x, g.z - k.pos.z) < 30);
             break;

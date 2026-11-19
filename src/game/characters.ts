@@ -25,6 +25,7 @@ export const CHARACTERS: CharacterDef[] = [
   { id: 'zorro', defaultName: 'Kitsu', label: 'Zorro', color: 0xf0862a, accent: 0x2a2a35, kart: 0x8a4fd8, power: 'Llama de zorro', powerDesc: 'Supervelocidad con fuego' },
   { id: 'dino', defaultName: 'Dino', label: 'Dinosaurio', color: 0x9cc48a, accent: 0xf1e6b0, kart: 0xf2a33a, power: 'Pisotón', powerDesc: 'Hace temblar el suelo' },
   { id: 'robot', defaultName: 'Robotín', label: 'Robot', color: 0xd83a2a, accent: 0x9aa3ad, kart: 0x3d4350, power: 'Brazos telescópicos', powerDesc: 'Estira el brazo, atrapa al de delante y se impulsa' },
+  { id: 'nieve', defaultName: 'Copito', label: 'Perrito de nieve', color: 0xa9dcf5, accent: 0xf7fbff, kart: 0x7a5ad8, power: 'Aliento helado', powerDesc: 'Congela a los que tiene delante y cerca' },
 ];
 
 export function displayName(c: CharacterDef): string {

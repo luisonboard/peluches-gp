@@ -25,13 +25,15 @@ export interface EventMap {
   'fx:explode': { x: number; y: number; z: number; big: boolean };
   'fx:quake': { kart: number; x: number; y: number; z: number };
   'fx:lightning': { kart: number };
+  /** Aliento helado de Copito: `n` = cuántos rivales congeló. */
+  'fx:frost': { kart: number; n: number };
   /** La mano telescópica de Robotín se agarra (a un rival si `caught`, si no a la pista) y lo jala. */
   'fx:grab': { kart: number; caught: boolean };
 }
 
-export type HitKind = 'spin' | 'stuck' | 'bubble' | 'shrink' | 'tumble';
+export type HitKind = 'spin' | 'stuck' | 'bubble' | 'shrink' | 'tumble' | 'freeze';
 export type ItemId = 'turbo' | 'pelota' | 'chicle';
-export type Species = 'perro' | 'esponja' | 'raton' | 'zorro' | 'dino' | 'robot';
+export type Species = 'perro' | 'esponja' | 'raton' | 'zorro' | 'dino' | 'robot' | 'nieve';
 
 type Handler<T> = (payload: T) => void;
 

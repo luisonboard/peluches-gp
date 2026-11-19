@@ -2,7 +2,7 @@
 import type { ItemId, Species } from '../core/events';
 
 /** 2: la sala y el inicio llevan la pista. 3: copa de 3 carreras. */
-export const PROTOCOL = 3;
+export const PROTOCOL = 4;
 
 /** Copa en curso tal como viaja por la red (ver game/cup.ts). */
 export interface CupData {
@@ -37,7 +37,7 @@ export interface RosterEntry {
  */
 export type KartState = number[];
 
-export const HIT_CODES = ['', 'spin', 'stuck', 'bubble', 'shrink', 'tumble'] as const;
+export const HIT_CODES = ['', 'spin', 'stuck', 'bubble', 'shrink', 'tumble', 'freeze'] as const;
 
 export type Msg =
   | { t: 'hello'; v: number; name: string; char: Species }

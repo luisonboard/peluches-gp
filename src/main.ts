@@ -843,7 +843,7 @@ export function startGame(): void {
   }
   const volKart = (i: number): number => (localOf(i) >= 0 ? 1 : karts[i] ? volAt(karts[i].pos.x, karts[i].pos.z) : 0);
   const POWER_SAY: Record<string, string> = {
-    perro: '¡Guau guau!', esponja: '¡Burbuja!', raton: '¡Rayo!', zorro: '¡Fuego de zorro!', dino: '¡Pisotón!', robot: '¡Brazos telescópicos!',
+    perro: '¡Guau guau!', esponja: '¡Burbuja!', raton: '¡Rayo!', zorro: '¡Fuego de zorro!', dino: '¡Pisotón!', robot: '¡Brazos telescópicos!', nieve: '¡Aliento helado!',
   };
 
   bus.on('box:open', ({ kart }) => {
@@ -873,6 +873,7 @@ export function startGame(): void {
     else if (power === 'zorro') audio.fire(v);
     else if (power === 'dino') audio.jump(v);
     else if (power === 'robot') audio.stretch(v);
+    else if (power === 'nieve') audio.frost(v);
   });
   bus.on('fx:grab', ({ kart, caught }) => {
     const v = volKart(kart);
@@ -900,13 +901,14 @@ export function startGame(): void {
     const v = volKart(kart);
     if (kind === 'stuck') audio.stuck(v);
     else if (kind === 'bubble') audio.pop(v);
+    else if (kind === 'freeze') audio.freeze(v);
     else if (kind !== 'shrink') audio.hit(v);
     const L = localOf(kart);
     if (L >= 0) {
       rumbleFor(L, 0.9, 0.5, 350);
       chases[L].shake(0.35);
       const who = by >= 0 && by !== kart ? karts[by] : null;
-      const what = { spin: '¡Uy!', stuck: '¡Chicle!', bubble: '¡Atrapado!', shrink: '¡Pequeñito!', tumble: '¡Bum!' }[kind];
+      const what = { spin: '¡Uy!', stuck: '¡Chicle!', bubble: '¡Atrapado!', shrink: '¡Pequeñito!', tumble: '¡Bum!', freeze: '¡Congelado!' }[kind];
       hud.toast(who ? `${what} ${who.name} te dio` : what, '#ffb0b0', L);
     }
   });

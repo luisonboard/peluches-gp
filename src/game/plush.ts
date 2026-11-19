@@ -369,6 +369,48 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
       tails.push(tail);
       break;
     }
+    case 'nieve': {
+      // Perrito de nieve (diseño propio): pelo azul hielo, hocico y barriga blancos, orejas redondas caídas,
+      // copo de nieve en la frente, mejillas rosadas, bufanda tejida morada y cola esponjosa enroscada.
+      b.sph(fur, [0, 0.5, 0], [0.54, 0.6, 0.5]);
+      b.sph(acc, [0, 0.45, 0.3], [0.38, 0.42, 0.22]);
+      const scarf = M.fur(0x7a5ad8);
+      b.mesh(new THREE.TorusGeometry(0.4, 0.1, 10, 28), scarf, [0, 0.92, 0.02], [1, 1, 1], [Math.PI / 2 - 0.12, 0, 0]);
+      b.limb(scarf, [0.18, 0.88, 0.38], [0.3, 0.5, 0.46], 0.09);
+      b.sph(M.fur(0xf6f3ee), [0.31, 0.44, 0.47], [0.08, 0.06, 0.08]);
+      head = b.group([0, 1.32, 0]);
+      b.sph(fur, [0, 0.04, 0], [0.6, 0.54, 0.54], undefined, head);
+      b.sph(acc, [0, -0.13, 0.4], [0.3, 0.22, 0.24], undefined, head);
+      b.sph(M.flat(0x2a3a5a, 0.4), [0, -0.04, 0.62], [0.11, 0.08, 0.08], undefined, head);
+      for (const sx of [-1, 1]) {
+        b.eye([sx * 0.2, 0.12, 0.47], 0.1, 0x1e3a6a, head);
+        b.sph(M.fur(0xf4a6c0), [sx * 0.34, -0.08, 0.38], [0.08, 0.06, 0.04], [0, sx * 0.6, 0], head);
+        // Orejas redondas y caídas a los lados.
+        const ear = b.group([sx * 0.46, 0.18, 0], [0, 0, sx * 0.5], head);
+        b.sph(fur, [0, -0.2, 0], [0.15, 0.3, 0.1], undefined, ear);
+        b.sph(acc, [0, -0.22, 0.05], [0.09, 0.2, 0.06], undefined, ear);
+        ears.push(ear);
+      }
+      // Copo de nieve bordado en la frente: seis brazos.
+      const flake = M.flat(0xffffff, 0.4, 0.3);
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI;
+        const dx = Math.sin(a) * 0.1;
+        const dy = Math.cos(a) * 0.1;
+        b.limb(flake, [-dx, 0.36 - dy, 0.47], [dx, 0.36 + dy, 0.47], 0.018, head);
+      }
+      armPair(fur, 0.8, 0.46, 0.11, acc);
+      const tail = b.group([0, 0.4, -0.45]);
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0.25, -0.25),
+        new THREE.Vector3(0, 0.55, -0.2),
+        new THREE.Vector3(0, 0.6, 0.02),
+      ]);
+      tail.add(new THREE.Mesh(taperedTube(curve, (u) => 0.08 + Math.sin(u * Math.PI) * 0.08), fur));
+      tails.push(tail);
+      break;
+    }
     case 'robot': {
       // Robot rojo de juguete: brazos grises articulados, visor con ojos que brillan, antena y ventosas azules.
       const red = M.flat(c.color, 0.35);

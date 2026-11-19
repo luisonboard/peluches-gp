@@ -59,6 +59,8 @@ export class KartModel {
   private wheelRot = 0;
   private readonly plush: PlushRig;
   private readonly bubble: THREE.Mesh;
+  /** Bloque de hielo (aliento helado de Copito). */
+  private ice: THREE.Mesh | null = null;
   private readonly lift = new THREE.Group();
   private cheer = 0;
   private stretch = 0;
@@ -171,6 +173,20 @@ export class KartModel {
     this.lift.position.y = k.bubbleLift;
     this.bubble.visible = k.bubbleLift > 0.05;
     if (this.bubble.visible) this.bubble.scale.setScalar(1 + Math.sin(this.t * 6) * 0.04);
+    const frozen = k.hitKind === 'freeze' && k.hitT > 0;
+    if (frozen && !this.ice) {
+      this.ice = new THREE.Mesh(
+        geo('ice', () => new RoundedBoxGeometry(2.3, 2.5, 3.1, 2, 0.25)),
+        mat('ice', () => new THREE.MeshPhysicalMaterial({ color: 0xbfe8ff, roughness: 0.08, transparent: true, opacity: 0.45, clearcoat: 1, depthWrite: false })),
+      );
+      this.ice.position.y = 1.15;
+      this.lift.add(this.ice);
+    }
+    if (this.ice) {
+      this.ice.visible = frozen;
+      // Se encoge un poco al derretirse (último cuarto de segundo).
+      if (frozen) this.ice.scale.setScalar(0.75 + 0.25 * Math.min(1, k.hitT / 0.25));
+    }
     // Parpadeo mientras dura la invulnerabilidad tras un golpe.
     r.visible = !(k.invulnT > 0 && k.hitT <= 0 && k.fireT <= 0 && Math.floor(k.blinkT * 14) % 2 === 1);
     this.cheer += ((k.finished || k.showoff ? 1 : 0) - this.cheer) * Math.min(1, dt * 3);
@@ -197,7 +213,7 @@ export class KartModel {
     }
     this.stretch += ((k.stretchT > 0 ? 1 : 0) - this.stretch) * Math.min(1, dt * (k.stretchT > 0 ? 12 : 5));
     this.plush.update({
-      steerS: k.steerS, speed: k.speed, t: this.t, cheer: this.cheer, hurt: k.hitT > 0 && k.hitKind !== 'stuck' ? 1 : 0,
+      steerS: k.steerS, speed: k.speed, t: this.t, cheer: this.cheer, hurt: k.hitT > 0 && k.hitKind !== 'stuck' && k.hitKind !== 'freeze' ? 1 : 0,
       reach: k.reachT > 0 ? 1 : 0, stretch: this.stretch,
     });
     const targetPitch = k.grounded ? -Math.atan(k.slope) : -Math.atan2(k.vy, Math.max(8, Math.abs(k.speed))) * 0.6;

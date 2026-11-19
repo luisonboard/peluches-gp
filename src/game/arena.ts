@@ -344,6 +344,8 @@ export class Arena {
       if (a && (k.char.id === 'robot' || (a.progress - k.progress) * this.track.step < 140)) tg.push(a.slot);
     } else if (k.char.id === 'raton') {
       for (const o of this.karts) if (o !== k && o.position < k.position && !o.finished) tg.push(o.slot);
+    } else if (k.char.id === 'nieve') {
+      for (const o of this.karts) if (o !== k && !o.finished && this.inFrost(k, o)) tg.push(o.slot);
     }
     const fx = Math.sin(k.heading);
     const fz = Math.cos(k.heading);
@@ -392,6 +394,8 @@ export class Arena {
           k.stompPending = true;
         }
         return;
+      case 'nieve':
+        return this.frost(k, m, m.tg.map((s) => this.bySlot(s)).filter((o): o is Kart => !!o));
       case 'robot': {
         const ms = this.free(this.missiles);
         if (ms) {
@@ -469,6 +473,47 @@ export class Arena {
       this.hit(o, 'shrink', k.index);
     }
     bus.emit('fx:lightning', { kart: k.index });
+  }
+
+  /** Alcance del aliento helado: un cono hacia delante (hasta 34 m) y un círculo pequeño alrededor. */
+  private inFrost(k: Kart, o: Kart): boolean {
+    const dx = o.pos.x - k.pos.x;
+    const dz = o.pos.z - k.pos.z;
+    if (Math.abs(o.pos.y - k.pos.y) > 4) return false;
+    const d = Math.hypot(dx, dz);
+    if (d < 9) return true;
+    const fwd = dx * Math.sin(k.heading) + dz * Math.cos(k.heading);
+    const side = Math.abs(dx * Math.cos(k.heading) - dz * Math.sin(k.heading));
+    return fwd > 0 && fwd < 34 && side < 4 + fwd * 0.22;
+  }
+
+  /** Aliento helado de Copito: nube de escarcha hacia delante y congela a los rivales elegidos. */
+  private frost(k: Kart, m: { x: number; y: number; z: number; vx: number; vz: number }, targets: Kart[]): void {
+    const sx = m.vz;
+    const sz = -m.vx;
+    for (let i = 0; i < 46; i++) {
+      const sp = 16 + Math.random() * 22;
+      const sd = (Math.random() - 0.5) * 0.7;
+      const vx = (m.vx + sx * sd) * sp;
+      const vz = (m.vz + sz * sd) * sp;
+      const col = Math.random() < 0.5 ? 0xe8f8ff : 0x9fdcff;
+      this.dust.spawn(m.x + m.vx * 1.8, m.y + 1.2, m.z + m.vz * 1.8, vx, 0.5 + Math.random() * 1.5, vz, 0.9, 1.2, 3, col, 0.6, -0.3, 1.2);
+    }
+    for (let i = 0; i < 24; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 3 + Math.random() * 6;
+      this.sparks.spawn(m.x, m.y + 1, m.z, Math.cos(a) * sp, 2 + Math.random() * 3, Math.sin(a) * sp, 0.6, 0.6, 0.1, 0xdff6ff, 1, 4, 2);
+    }
+    this.ring(m.x, m.y + 0.4, m.z, 9, 0.45, 0, 0xbfeaff);
+    let n = 0;
+    for (const o of targets) {
+      if (this.hit(o, 'freeze', k.index)) n++;
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * Math.PI * 2;
+        this.sparks.spawn(o.pos.x, o.pos.y + 1, o.pos.z, Math.cos(a) * 4, 3 + Math.random() * 2, Math.sin(a) * 4, 0.5, 0.5, 0.1, 0xffffff, 1, 6, 2);
+      }
+    }
+    bus.emit('fx:frost', { kart: k.index, n });
   }
 
   private quake(k: Kart, x = k.pos.x, y = k.groundY, z = k.pos.z): void {

@@ -21,7 +21,7 @@ export interface KartCtl {
 export const NO_CTL: KartCtl = { steer: 0, throttle: 0, brake: 0, drift: false, item: false, power: false };
 
 /** Duración (s) de cada golpe. */
-export const HIT_TIME: Record<HitKind, number> = { spin: 1.15, stuck: 1.4, bubble: 2.0, shrink: 3.0, tumble: 0.9 };
+export const HIT_TIME: Record<HitKind, number> = { spin: 1.15, stuck: 1.4, bubble: 2.0, shrink: 3.0, tumble: 0.9, freeze: 1.6 };
 
 /** Ajustable en vivo desde DevTools: __game.TUNING. */
 export const TUNING = {
@@ -261,7 +261,7 @@ export class Kart {
     if (this.shrinkT > 0) maxS *= 0.62;
     if (this.hitKind === 'stuck') maxS *= 0.3;
     const surging = (this.boostT > 0 || this.fireT > 0) && !disabled;
-    if (disabled) this.speed *= Math.exp(-(this.hitKind === 'bubble' ? 4 : 2.6) * dt);
+    if (disabled) this.speed *= Math.exp(-(this.hitKind === 'bubble' ? 4 : this.hitKind === 'freeze' ? 5 : 2.6) * dt);
     if (this.grounded && !disabled) {
       if (surging) this.speed += (maxS - this.speed) * Math.min(1, dt * 5);
       else if (throttle > 0.05) {

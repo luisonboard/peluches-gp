@@ -218,6 +218,16 @@ export class GameAudio {
     this.tone(caught ? 700 : 500, 0.4, 'triangle', 0.16 * vol, 0, 140);
     this.tone(caught ? 350 : 250, 0.3, 'sine', 0.12 * vol, 0.05, 900);
   }
+  /** Aliento helado: soplido frío con campanitas de hielo. */
+  frost(vol = 1): void {
+    this.noise(0.8, 5000, 1800, 0.22 * vol, 'highpass');
+    [2093, 2637, 3136, 2349].forEach((f, i) => this.tone(f, 0.18, 'sine', 0.07 * vol, 0.1 + i * 0.08));
+  }
+  /** Congelado: crujido de hielo. */
+  freeze(vol = 1): void {
+    this.noise(0.25, 4000, 900, 0.22 * vol, 'highpass');
+    this.tone(1800, 0.3, 'triangle', 0.08 * vol, 0.02, 600);
+  }
   explosion(vol = 1, big = false): void {
     this.noise(big ? 0.9 : 0.5, 900, 50, (big ? 0.45 : 0.3) * vol, 'lowpass');
     this.tone(90, 0.4, 'sine', 0.25 * vol, 0, 35);

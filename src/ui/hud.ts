@@ -46,8 +46,8 @@ const CSS = `
 .pgp-label { font-size: 13px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #6a64a0; margin: 14px 2px 8px; }
 .pgp-row { display: flex; flex-wrap: wrap; gap: 10px; border-radius: 18px; padding: 4px; outline: 3px solid transparent; }
 .pgp-row.focus { outline-color: #ffb52a; }
-.pgp-chars { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-@media (max-width: 620px) { .pgp-chars { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.pgp-chars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 620px) { .pgp-chars { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .pgp-char { border: 4px solid transparent; border-radius: 18px; background: #f1effa; padding: 8px 4px 6px; text-align: center; cursor: pointer;
   font: inherit; color: inherit; display: grid; justify-items: center; gap: 4px; min-width: 0; }
 .pgp-char .face { width: 52px; height: 52px; border-radius: 18px; position: relative; box-shadow: inset 0 -7px 0 rgba(0,0,0,0.18); }
