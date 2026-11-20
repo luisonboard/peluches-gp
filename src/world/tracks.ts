@@ -175,7 +175,7 @@ export const TRACKS: TrackEntry[] = [
   {
     id: 'recreo',
     name: 'Patio de Recreo',
-    blurb: 'Salta sobre la piscina de pelotas',
+    blurb: 'Salto largo sobre la piscina de pelotas',
     ready: true,
     def: PLAYGROUND_TRACK,
     seed: 'recreo',

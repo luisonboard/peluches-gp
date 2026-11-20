@@ -93,7 +93,8 @@ export const PLAYGROUND_TRACK: TrackDef = {
     { seg: 13, f: 0.3 },
   ],
   jumps: [
-    { seg: 7, f: 0.62, ramp: 14, rise: 3, gap: 12, floor: -4, boost: true },
+    // Salto largo: rampa de 20 m que sube 5 m y 22 m de piscina de pelotas (≈ 1 s en el aire; se cruza desde ≈ 26 m/s).
+    { seg: 7, f: 0.62, ramp: 20, rise: 5, gap: 22, floor: -4, boost: true },
     { seg: SEESAW_AT.seg, f: SEESAW_AT.f, ramp: 6, rise: 1, gap: 0, floor: 0, boost: false },
   ],
   // Pelotas de colores que cruzan la pista dando botes.

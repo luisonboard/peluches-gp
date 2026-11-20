@@ -336,8 +336,8 @@ Falta: la prueba con un iPhone y un Android reales (giroscopio, retraso por el r
     la maestra (manzana gigante), vuelta por encima y bajada por una regla. Pizarra con dibujos de tiza,
     abecedario, reloj, ventanas, globo terráqueo, mochilas, crayones, lápices y gomas. Charcos de pegamento.
   - **Patio de Recreo** (`recreo`, de día): túnel de gusano con cara sonriente, arenero con balde, pala y castillo
-    de arena, salto sobre una **piscina de pelotas** (quien cae reaparece al otro lado, «¡A la piscina de
-    pelotas!»), puente entre dos torres de castillo con banderines y bache del sube y baja. Pelotas de colores que
+    de arena, **salto largo** sobre una piscina de pelotas (rampa de 20 m que sube 5 m y 22 m sin suelo: ≈ 1 s y
+    ≈ 40 m en el aire con el turbo; quien cae reaparece al otro lado, «¡A la piscina de pelotas!»), puente entre dos torres de castillo con banderines y bache del sube y baja. Pelotas de colores que
     cruzan la pista rodando. Columpios, tobogán, tiovivo, rayuela, árboles, cerca de colores y el edificio con el
     letrero «Mi Escuelita».
   - **El Comedor** (`comedor`): subida por una bandeja a una mesa larga con mantel de cuadros, **salto de una
@@ -349,7 +349,8 @@ Falta: la prueba con un iPhone y un Android reales (giroscopio, retraso por el r
 
 Comprobado: 3 carreras por pista con `?autoplay&speed=8&cpu=normal`: todas terminan con los 7 karts y nadie
 parado más de 0,4 s; vueltas del jugador automático de ≈ 29 s (Aula), ≈ 30 s (Recreo) y ≈ 34 s (Comedor).
-Copa entera con `?copa=escuela&autostart&autoplay`: Aula → Recreo → Comedor, tabla «Copa Escuelita» entre carreras
+Con el salto largo, 5 carreras más en el Recreo (rivales normales y fáciles): 0–1 caídas por carrera
+en ≈ 84 saltos. Copa entera con `?copa=escuela&autostart&autoplay`: Aula → Recreo → Comedor, tabla «Copa Escuelita» entre carreras
 y podio final. `npm run check:copa` prueba la nueva copa y la copia por la red. Triángulos en Bajo: Aula 68 k,
 Recreo 85 k, Comedor 82 k (Jardín 105 k).
 

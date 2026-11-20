@@ -260,11 +260,12 @@ export function buildPlayground(track: Track, _tex: Textures, q: Quality, rng: R
     for (let a = -half + 1.4; a < half - 1.2; a += 2.5)
       for (let c = -width / 2 + 1.4; c < width / 2 - 1.2; c += 2.5)
         for (const layer of [0, 1]) balls.push([a + rng.range(-0.5, 0.5) + layer * 1.2, c + rng.range(-0.5, 0.5) + layer * 1.2, layer]);
-    const ballMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1.35, 8, 6), new THREE.MeshStandardMaterial({ roughness: 0.35 }), balls.length);
+    const ballMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1.25, 8, 6), new THREE.MeshStandardMaterial({ roughness: 0.35 }), balls.length);
     balls.forEach(([a, c, layer], i) => {
       const x = mid.x + mid.nx * a + mid.tx * c;
       const z = mid.z + mid.nz * a + mid.tz * c;
-      ballMesh.setMatrixAt(i, m4.makeTranslation(x, 0.9 + layer * 1.3 + rng.range(-0.3, 0.3), z));
+      // Bajitas (≈ 2,4 m como mucho) para no tapar la cámara que pasa por encima tras el salto.
+      ballMesh.setMatrixAt(i, m4.makeTranslation(x, 0.25 + layer * 0.8 + rng.range(-0.1, 0.1), z));
       ballMesh.setColorAt(i, col.set(SCHOOL_COLORS[Math.floor(rng.next() * SCHOOL_COLORS.length)]));
     });
     g.add(ballMesh);
