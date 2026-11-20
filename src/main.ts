@@ -12,7 +12,7 @@ import { makeTextures } from './world/textures';
 import { buildTrack, type TrackVisual } from './world/trackMesh';
 import { readyTrack, dustColor, type ReadyTrack } from './world/tracks';
 import { Obstacles } from './game/obstacles';
-import { Cup, CUP_TRACKS } from './game/cup';
+import { Cup, cupDef, isCupId } from './game/cup';
 import { Track } from './game/track';
 import { CHARACTERS } from './game/characters';
 import { KartModel } from './game/kartModel';
@@ -78,8 +78,8 @@ export function startGame(): void {
     obstacles = new Obstacles(track, quality.shadowMap > 0);
     scene.add(trackVis.group, scenery, obstacles.group);
   }
-  const wantsCup = params.copa || (!params.track && settings.cup);
-  mountTrack(params.track ?? (wantsCup ? CUP_TRACKS[0] : settings.trackId));
+  const wantsCup = cupDef(params.copa ?? (params.track ? null : settings.cup))?.id ?? null;
+  mountTrack(params.track ?? (wantsCup ? cupDef(wantsCup)!.tracks[0] : settings.trackId));
 
   const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 1600);
   // Una cámara por jugador de la pantalla dividida (la del jugador 1 es también la del título y el podio).
@@ -238,7 +238,7 @@ export function startGame(): void {
   let join: ReturnType<typeof openSplitJoin> | null = null;
   const activeCup = (): Cup | null => (session.active ? session.cup : cup);
   /** Pista que se ve en el menú: la elegida, o la primera de la copa. */
-  const titleTrack = (): string => (setup.cup ? CUP_TRACKS[0] : setup.trackId);
+  const titleTrack = (): string => cupDef(setup.cup)?.tracks[0] ?? setup.trackId;
   let resultsShownAt = -1;
 
   const gyro = new Gyro();
@@ -394,9 +394,9 @@ export function startGame(): void {
     audio.playMusic('menu');
   }
 
-  /** Copa local: las tres pistas seguidas. */
+  /** Copa local: sus tres pistas seguidas. */
   function startCup(): void {
-    cup = new Cup(CHARACTERS.map((c) => ({ char: c.id, name: displayName(c) })));
+    cup = new Cup(CHARACTERS.map((c) => ({ char: c.id, name: displayName(c) })), setup.cup ?? undefined);
     loadTrack(cup.trackId);
     startRace();
   }
@@ -542,7 +542,8 @@ export function startGame(): void {
   }
 
   function splitSummary(): string {
-    if (setup.cup) return `Copa Peluche · ${setup.laps} vueltas · rivales ${setup.cpu.label}`;
+    const cd = cupDef(setup.cup);
+    if (cd) return `${cd.name} · ${setup.laps} vueltas · rivales ${setup.cpu.label}`;
     const t = trackEntry;
     return `${t.name} · ${setup.laps} vueltas · rivales ${setup.cpu.label}`;
   }
@@ -682,7 +683,7 @@ export function startGame(): void {
       code,
       onCreate: () => {
         showOnlineMenu({ busy: 'Creando la sala…', onCreate: () => {}, onJoin: () => {}, onBack: () => openOnline() });
-        session.create(myChar().id, displayName(myChar()), setup.laps, setup.cpu.id, setup.cup ? 'copa' : trackEntry.id).catch((e: Error) => openOnline(e.message));
+        session.create(myChar().id, displayName(myChar()), setup.laps, setup.cpu.id, setup.cup ?? trackEntry.id).catch((e: Error) => openOnline(e.message));
       },
       onJoin: (raw) => {
         const c = normalizeCode(raw);
@@ -710,7 +711,7 @@ export function startGame(): void {
       },
       options: (laps, cpu, trackId) => {
         session.setOptions(laps, cpu, trackId);
-        setup.cup = trackId === 'copa';
+        setup.cup = isCupId(trackId) ? trackId : null;
         if (!setup.cup) setup.trackId = trackId;
         storeSetup();
         if (loadTrack(titleTrack())) {
@@ -786,17 +787,18 @@ export function startGame(): void {
   });
   bus.on('kart:fall', ({ kart, x, z }) => {
     // Chapuzón en el arroyo: salpicadura donde cayó (el kart ya está en la otra orilla).
+    const fallFx = trackEntry.look.fall ?? { word: '¡Al agua! ¡Más rápido la próxima!', color: 0xbfe6ff };
     for (let i = 0; i < 26; i++) {
       const a = Math.random() * Math.PI * 2;
       const r = Math.random() * 2;
-      dust.spawn(x + Math.cos(a) * r, 0.3, z + Math.sin(a) * r, Math.cos(a) * 3, 5 + Math.random() * 5, Math.sin(a) * 3, 1, 0.8, 0.3, 0xbfe6ff, 0.9, 1.5, 1.4);
+      dust.spawn(x + Math.cos(a) * r, 0.3, z + Math.sin(a) * r, Math.cos(a) * 3, 5 + Math.random() * 5, Math.sin(a) * 3, 1, 0.8, 0.3, fallFx.color, 0.9, 1.5, 1.4);
     }
     const v = volKart(kart);
     audio.pop(v);
     audio.land();
     const L = localOf(kart);
     if (L >= 0) {
-      hud.toast('¡Al agua! ¡Más rápido la próxima!', '#bfe6ff', L);
+      hud.toast(fallFx.word, '#bfe6ff', L);
       rumbleFor(L, 0.6, 0.4, 300);
       chases[L].reset();
     }
@@ -804,14 +806,15 @@ export function startGame(): void {
   bus.on('kart:slip', ({ kart }) => {
     const k = karts[kart];
     if (!k) return;
+    const slickFx = trackEntry.look.slick ?? { word: '¡Jabón!', particle: 0xe8f8ff };
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2;
-      dust.spawn(k.pos.x + Math.cos(a) * 1.4, k.pos.y + 0.4, k.pos.z + Math.sin(a) * 1.4, Math.cos(a) * 2, 2.5 + Math.random() * 2, Math.sin(a) * 2, 0.9, 0.7, 0.2, 0xe8f8ff, 0.8, 0.5, 1.2);
+      dust.spawn(k.pos.x + Math.cos(a) * 1.4, k.pos.y + 0.4, k.pos.z + Math.sin(a) * 1.4, Math.cos(a) * 2, 2.5 + Math.random() * 2, Math.sin(a) * 2, 0.9, 0.7, 0.2, slickFx.particle, 0.8, 0.5, 1.2);
     }
     const L = localOf(kart);
     if (L >= 0) {
       audio.bubble(0.7);
-      hud.toast('¡Jabón!', '#bfe9ff', L);
+      hud.toast(slickFx.word, '#bfe9ff', L);
       rumbleFor(L, 0.3, 0.2, 200);
     }
   });

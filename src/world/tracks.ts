@@ -11,6 +11,10 @@ import { BATH_TRACK } from './bathTrack';
 import { buildBath } from './bath';
 import { GARDEN_TRACK } from './gardenTrack';
 import { buildGarden, MOON_DIR } from './garden';
+import { CLASSROOM_TRACK, PLAYGROUND_TRACK, CAFETERIA_TRACK } from './schoolTracks';
+import { buildClassroom } from './classroom';
+import { buildPlayground, SUN_DIR } from './playground';
+import { buildCafeteria } from './cafeteria';
 
 /** Luz, cielo y colores de la pista. */
 export interface TrackLook {
@@ -30,6 +34,10 @@ export interface TrackLook {
   dust?: Partial<Record<Surface, number>>;
   /** Faldón bajo los tramos elevados: textura y tinte por superficie (sin tinte: blanco). */
   skirt?: { tex: 'cardboard' | 'towel'; tint?: Partial<Record<Surface, number>> };
+  /** Charcos (`slicks`): colores del dibujo (sin ellos, jabón), palabra que aparece y color de las gotas. */
+  slick?: { fill: [string, string]; ring: string; word: string; particle: number };
+  /** Caída en un hueco de salto: palabra y color de la salpicadura (sin ellos, el arroyo). */
+  fall?: { word: string; color: number };
 }
 
 export const shoulderColor = (look: TrackLook, s: Surface): number => look.shoulder[s] ?? look.shoulder.floor;
@@ -135,6 +143,90 @@ export const TRACKS: TrackEntry[] = [
       skirt: { tex: 'cardboard', tint: { plank: 0x9a6a3c, ramp: 0xb07a45 } },
     },
     scenery: buildGarden,
+  },
+  // --- Copa Escuelita ---
+  {
+    id: 'aula',
+    name: 'El Aula',
+    blurb: 'Sube por los libros a la mesa de la maestra',
+    ready: true,
+    def: CLASSROOM_TRACK,
+    seed: 'aula',
+    podium: { x: 5, z: 30, yaw: Math.PI },
+    look: {
+      sky: 0xd8c890,
+      fog: [260, 760],
+      hemi: { sky: 0xfff4dc, ground: 0x9a8a5a, intensity: 1.3 },
+      sun: { color: 0xfff0d6, intensity: 2.2, dir: [-0.3, 1, 0.5] },
+      exposure: 1.05,
+      shoulder: { floor: 0x3f8fd8, books: 0xe8423a, desk: 0xf3d08a, ruler: 0xffd23a },
+      dust: { floor: 0xbfe0f0, books: 0xf3b0a0, desk: 0xf3e0b0, ruler: 0xffe89a },
+      barrier: {
+        floor: [0x3fb24a, 0xf6f3ee],
+        books: [0xe8423a, 0xffd23a],
+        desk: [0x8a4fd8, 0xf6f3ee],
+        ruler: [0xff8a1a, 0xffd23a],
+      },
+      skirt: { tex: 'cardboard', tint: { books: 0xe86a5a, desk: 0xd9a868, ruler: 0xffd23a } },
+      slick: { fill: ['rgba(255,255,255,0.97)', 'rgba(240,240,232,0.9)'], ring: 'rgba(200,200,190,0.9)', word: '¡Pegamento!', particle: 0xffffff },
+    },
+    scenery: buildClassroom,
+  },
+  {
+    id: 'recreo',
+    name: 'Patio de Recreo',
+    blurb: 'Salta sobre la piscina de pelotas',
+    ready: true,
+    def: PLAYGROUND_TRACK,
+    seed: 'recreo',
+    podium: { x: 60, z: -55, yaw: 0 },
+    look: {
+      sky: 0x9fd3ff,
+      fog: [320, 900],
+      hemi: { sky: 0xe6f4ff, ground: 0x5a8a3a, intensity: 1.35 },
+      sun: { color: 0xfff4dc, intensity: 2.4, dir: SUN_DIR },
+      exposure: 1.05,
+      shoulder: { floor: 0xf28c3a, sand: 0xe8cf8e, plank: 0xb07a45, ramp: 0x2f9bd6 },
+      dust: { floor: 0x9fcf8a, sand: 0xf0dca0, plank: 0xc89a6a, ramp: 0x9fcf8a },
+      barrier: {
+        floor: [0x2f7de0, 0xffd23a],
+        sand: [0xe8423a, 0xf6f3ee],
+        plank: [0x8a4fd8, 0xffd23a],
+        ramp: [0xff8a1a, 0xf6f3ee],
+      },
+      skirt: { tex: 'cardboard', tint: { plank: 0xa86a3c, ramp: 0x2f9bd6 } },
+      fall: { word: '¡A la piscina de pelotas! ¡Más rápido la próxima!', color: 0xffd23a },
+    },
+    scenery: buildPlayground,
+  },
+  {
+    id: 'comedor',
+    name: 'El Comedor',
+    blurb: 'Salta de una mesa a otra',
+    ready: true,
+    def: CAFETERIA_TRACK,
+    seed: 'comedor',
+    podium: { x: 40, z: -40, yaw: 0 },
+    look: {
+      sky: 0xc8e4d8,
+      fog: [280, 800],
+      hemi: { sky: 0xf4fff8, ground: 0x8fae9c, intensity: 1.3 },
+      sun: { color: 0xfffaf0, intensity: 2.2, dir: [0.3, 1, -0.5] },
+      exposure: 1.05,
+      shoulder: { floor: 0xf07ab0, tray: 0xff8a3a, table: 0xf6f3ee, napkin: 0x7fc4d8, ramp: 0xffd23a },
+      dust: { floor: 0xf4d0e0, tray: 0xffc090, table: 0xffffff, napkin: 0xd8f0ff, ramp: 0xfff0a0 },
+      barrier: {
+        floor: [0xe8423a, 0xf6f3ee],
+        tray: [0xff8a3a, 0xffd23a],
+        table: [0x3fb24a, 0xf6f3ee],
+        napkin: [0x2f9bd6, 0xf6f3ee],
+        ramp: [0xff8a1a, 0xffd23a],
+      },
+      skirt: { tex: 'towel', tint: { tray: 0xff8a3a, table: 0xe0563a, napkin: 0xffffff, ramp: 0xe0563a } },
+      slick: { fill: ['rgba(255,170,40,0.95)', 'rgba(255,140,20,0.85)'], ring: 'rgba(255,220,120,0.95)', word: '¡Jugo!', particle: 0xffb030 },
+      fall: { word: '¡Al suelo! ¡Más rápido la próxima!', color: 0xf6f3ee },
+    },
+    scenery: buildCafeteria,
   },
 ];
 

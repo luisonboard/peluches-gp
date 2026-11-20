@@ -22,8 +22,8 @@ export const params = {
   profile: q.get('perfil'),
   /** Pista por id (`cuarto`, …). */
   track: q.get('track'),
-  /** Copa de 3 carreras (con `?autostart` empieza sola). */
-  copa: q.has('copa'),
+  /** Copa de 3 carreras (con `?autostart` empieza sola): `?copa` = Copa Peluche, `?copa=escuela` = Copa Escuelita. */
+  copa: q.has('copa') ? (q.get('copa') ? `copa-${q.get('copa')}` : 'copa') : null,
   /** Pantalla dividida (con `?autostart`: teclado + mandos 0, 1…). `?split=3` o `?split=4`: cuántos jugadores (2 por defecto). */
   split: q.has('split'),
   splitPlayers: Math.max(2, Math.min(4, Math.round(num('split', 2)) || 2)),

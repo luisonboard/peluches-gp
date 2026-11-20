@@ -1,5 +1,5 @@
 // Comprueba los puntos, los desempates y la parrilla de la copa: `npm run check:copa`.
-import { Cup, CUP_POINTS } from '../src/game/cup';
+import { Cup, CUP_POINTS, CUPS, cupDef } from '../src/game/cup';
 import type { Species } from '../src/core/events';
 
 let fails = 0;
@@ -66,6 +66,21 @@ eq('robot venía 6.º y sube', [robot.prevRank, robot.rank < robot.prevRank], [6
 // 4. Viaja por la red sin perder nada.
 const back = Cup.fromJSON(JSON.parse(JSON.stringify(f.toJSON())));
 eq('copia por la red', back.standings(), f.standings());
+
+// 5. Copa Escuelita: sus tres pistas, en orden, y viaja por la red con su id.
+eq('copas', CUPS.map((c) => c.id), ['copa', 'copa-escuela']);
+eq('una pista no es una copa', cupDef('aula'), undefined);
+const e = new Cup(entrants, 'copa-escuela');
+const seen: string[] = [];
+for (let i = 0; i < 3; i++) {
+  seen.push(e.trackId);
+  e.addRace(race(...all));
+}
+eq('pistas de la Copa Escuelita', seen, ['aula', 'recreo', 'comedor']);
+eq('Copa Escuelita terminada', [e.done, e.total], [true, 3]);
+const eBack = Cup.fromJSON(JSON.parse(JSON.stringify(e.toJSON())));
+eq('la copia por la red conserva la copa', [eBack.id, eBack.def.name, eBack.standings()], ['copa-escuela', 'Copa Escuelita', e.standings()]);
+eq('copa sin id (versión anterior): Copa Peluche', Cup.fromJSON({ raced: 0, rows: [] }).def.name, 'Copa Peluche');
 
 console.log(fails ? `\n${fails} comprobación(es) fallaron` : '\nTodo bien');
 process.exit(fails ? 1 : 0);

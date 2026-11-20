@@ -232,14 +232,15 @@ export function buildTrack(track: Track, tex: Textures, q: Quality, look: TrackL
     c.width = c.height = 128;
     const cg = c.getContext('2d')!;
     const grd = cg.createRadialGradient(64, 64, 8, 64, 64, 62);
-    grd.addColorStop(0, 'rgba(255,255,255,0.95)');
-    grd.addColorStop(0.6, 'rgba(200,236,255,0.85)');
-    grd.addColorStop(1, 'rgba(200,236,255,0)');
+    const [fill0, fill1] = look.slick?.fill ?? ['rgba(255,255,255,0.95)', 'rgba(200,236,255,0.85)'];
+    grd.addColorStop(0, fill0);
+    grd.addColorStop(0.6, fill1);
+    grd.addColorStop(1, fill1.replace(/[\d.]+\)$/, '0)'));
     cg.fillStyle = grd;
     cg.beginPath();
     cg.ellipse(64, 64, 62, 62, 0, 0, Math.PI * 2);
     cg.fill();
-    cg.strokeStyle = 'rgba(120,190,235,0.9)';
+    cg.strokeStyle = look.slick?.ring ?? 'rgba(120,190,235,0.9)';
     cg.lineWidth = 3;
     for (const [x, y, r] of [[40, 44, 10], [80, 36, 7], [70, 78, 12], [36, 84, 6], [92, 70, 5]]) {
       cg.beginPath();

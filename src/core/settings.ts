@@ -25,8 +25,8 @@ export interface Settings {
   charIndex: number;
   /** Última pista elegida. */
   trackId: string;
-  /** Eligió la copa de 3 carreras. */
-  cup: boolean;
+  /** Copa elegida (id, ver game/cup.ts) o null para una carrera suelta. */
+  cup: string | null;
   /** Jugadores 2, 3 y 4 de la pantalla dividida (el jugador 1 usa los ajustes de arriba). */
   others: PlayerPrefs[];
 }
@@ -54,7 +54,7 @@ export const PROFILE_DEFAULTS: Record<Profile, Pick<Settings, 'autoAccel' | 'sma
 const KEY = 'pgp.settings';
 
 export function defaultSettings(): Settings {
-  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3, trackId: 'cuarto', cup: false, others: OTHER_CHARS.map((charIndex) => ({ profile: 'normal', ...profileAssist('normal'), charIndex })) };
+  return { profile: 'peque', ...PROFILE_DEFAULTS.peque, music: true, sfx: true, steerMode: 'botones', gyroSens: 'normal', gyroInvert: false, laps: 3, charIndex: 3, trackId: 'cuarto', cup: null, others: OTHER_CHARS.map((charIndex) => ({ profile: 'normal', ...profileAssist('normal'), charIndex })) };
 }
 
 /** Peluche por defecto de los jugadores 2, 3 y 4 (el 1 empieza con el zorro, índice 3). */
@@ -72,7 +72,9 @@ export function loadSettings(): Settings {
       const old = saved.others ?? (saved.p2 ? [saved.p2] : []);
       const others = s.others.map((d, i) => ({ ...d, ...(old[i] ?? {}) }));
       delete saved.p2;
-      Object.assign(s, saved, { others });
+      // Versiones anteriores guardaban la copa como sí/no (solo había una).
+      const cup = (saved.cup as unknown) === true ? 'copa' : typeof saved.cup === 'string' ? saved.cup : null;
+      Object.assign(s, saved, { others, cup });
     }
   } catch {
     /* sin almacenamiento: valores por defecto */

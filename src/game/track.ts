@@ -3,7 +3,10 @@
 import * as THREE from 'three';
 
 /** Superficie de cada tramo: solo cambia los colores y el polvo (la física es la misma). */
-export type Surface = 'floor' | 'ramp' | 'bed' | 'mat' | 'towel' | 'rim' | 'sponge' | 'stone' | 'plank';
+export type Surface =
+  | 'floor' | 'ramp' | 'bed' | 'mat' | 'towel' | 'rim' | 'sponge' | 'stone' | 'plank'
+  // Escuelita: libros, pupitre, regla (Aula); arena y tobogán (Recreo); bandeja, mesa y servilleta (Comedor).
+  | 'books' | 'desk' | 'ruler' | 'sand' | 'slide' | 'tray' | 'table' | 'napkin';
 
 export interface CtrlPt {
   x: number;
@@ -40,6 +43,8 @@ export interface TrackDef {
   slicks?: PadDef[];
   /** Obstáculos que cruzan la pista de lado a lado (patitos de goma). */
   movers?: MoverDef[];
+  /** Cómo se ven los obstáculos: patito (por defecto), pelota de colores o naranja. */
+  moverLook?: 'duck' | 'ball' | 'orange';
   /**
    * Saltos: aceleradores a todo el ancho, rampa recta y, si `gap` > 0, un hueco sin suelo (arroyo, precipicio).
    * Quien cae al hueco reaparece al otro lado.

@@ -4,7 +4,7 @@ import { CPU_LEVELS } from '../game/race';
 import type { Track } from '../game/track';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
 import type { ItemId, Species } from '../core/events';
-import type { Cup } from '../game/cup';
+import { CUPS, type Cup } from '../game/cup';
 import type { Kart } from '../game/kart';
 import { TRACKS, trackOutline, type ReadyTrack } from '../world/tracks';
 import { ITEM_ICONS } from './icons';
@@ -99,7 +99,7 @@ const CSS = `
 .pgp-track.sel { border-color: #2a2050; background: #fff; }
 .pgp-track .cupicon { width: 56px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-size: 26px; background: linear-gradient(#ffe27a, #ffb52a); }
 .pgp-track .sp { display: none; }
-/* Nombre corto en la tarjeta (Cuarto, Bañera, Jardín, Copa); el completo va en la ayuda (title). */
+/* Nombre corto en la tarjeta (Cuarto, Bañera, Jardín, Copa, Aula…); el completo va en la ayuda (title). */
 .pgp-track .nm { display: none; }
 .pgp-track .nm.short { display: block; }
 @media (min-height: 521px) and (min-width: 621px) {
@@ -124,7 +124,15 @@ const CSS = `
 }
 @media (max-height: 520px) {
   .pgp-track-label { display: none; }
-  .pgp-tracks { margin-top: 6px; }
+  .pgp-tracks { margin-top: 6px; gap: 4px 8px; }
+  /* Dos filas de pistas (una por copa): "Rivales" y "Vueltas" van al lado de sus botones para que todo quepa. */
+  .pgp-opts { margin-top: 6px; flex-wrap: nowrap; gap: 4px 12px; }
+  .pgp-opts > div { display: flex; align-items: center; gap: 6px; }
+  .pgp-opts .pgp-label { margin: 0; font-size: 10px; letter-spacing: .04em; }
+  .pgp-opts .pgp-row { flex-wrap: nowrap; gap: 4px; }
+  .pgp-opts .pgp-opt { padding: 5px 10px; }
+  .pgp-char-label { display: none; }
+  .pgp-chars { margin-top: 2px; }
   .pgp-track { padding: 2px 6px; border-width: 3px; gap: 6px; border-radius: 14px; }
   .pgp-track canvas, .pgp-track .lock, .pgp-track .cupicon { width: 36px; height: 26px; font-size: 14px; border-radius: 8px; }
   .pgp-track .nm { font-size: 12px; }
@@ -231,8 +239,8 @@ const CSS = `
 export interface TitleSetup {
   charIndex: number;
   trackId: string;
-  /** Copa de 3 carreras en vez de una carrera suelta. */
-  cup: boolean;
+  /** Copa de 3 carreras (su id) en vez de una carrera suelta. */
+  cup: string | null;
   cpu: CpuLevel;
   laps: number;
 }
@@ -554,7 +562,7 @@ export class Hud {
     const card = el('div', 'pgp-card');
     wrap.append(logo, sub, card);
 
-    card.append(el('div', 'pgp-label', 'Elige tu peluche'));
+    card.append(el('div', 'pgp-label pgp-char-label', 'Elige tu peluche'));
     const charRow = el('div', 'pgp-row');
     const chars = el('div', 'pgp-chars');
     chars.style.width = '100%';
@@ -574,7 +582,16 @@ export class Hud {
     const trackRow = el('div', 'pgp-row');
     const tracks = el('div', 'pgp-tracks');
     trackRow.append(tracks);
-    const trackBtns = TRACKS.map((t) => {
+    // Una fila por copa: sus tres pistas y la copa al final. Las pistas sin copa van detrás.
+    const cupOf = (id: string): number => CUPS.findIndex((c) => c.tracks.includes(id));
+    const ordered = [...TRACKS].sort((a, b) => {
+      const ca = cupOf(a.id) < 0 ? CUPS.length : cupOf(a.id);
+      const cb = cupOf(b.id) < 0 ? CUPS.length : cupOf(b.id);
+      return ca - cb || (ca < CUPS.length ? CUPS[ca].tracks.indexOf(a.id) - CUPS[ca].tracks.indexOf(b.id) : 0);
+    });
+    /** Tarjetas en el orden del menú: pistas (`track`) y copas (`cup`). */
+    const cards: { id: string; cup: boolean; btn: HTMLButtonElement }[] = [];
+    const trackCard = (t: (typeof TRACKS)[number]): void => {
       const b = el('button', 'pgp-track');
       if (t.ready) {
         b.append(trackThumb(t));
@@ -588,16 +605,24 @@ export class Hud {
       txt.append(el('div', 'nm', t.name), el('div', 'nm short', t.name.replace(/^El |^La /, '').split(' ')[0]), el('div', 'sp', t.ready ? t.blurb : 'Pronto'));
       b.append(txt);
       tracks.append(b);
-      return b;
-    });
-    const cupBtn = el('button', 'pgp-track');
-    cupBtn.append(el('div', 'cupicon', '🏆'));
-    const cupTxt = el('div');
-    cupTxt.append(el('div', 'nm', 'Copa Peluche'), el('div', 'nm short', 'Copa'), el('div', 'sp', 'Las 3 pistas seguidas'));
-    cupBtn.append(cupTxt);
-    cupBtn.title = 'Copa Peluche: las 3 pistas seguidas, con puntos';
-    cupBtn.onclick = () => setCup();
-    tracks.append(cupBtn);
+      cards.push({ id: t.id, cup: false, btn: b });
+    };
+    const cupCard = (c: (typeof CUPS)[number]): void => {
+      const b = el('button', 'pgp-track');
+      b.append(el('div', 'cupicon', c.icon));
+      const txt = el('div');
+      txt.append(el('div', 'nm', c.name), el('div', 'nm short', c.short), el('div', 'sp', c.blurb));
+      b.append(txt);
+      b.title = `${c.name}: ${c.blurb.toLowerCase()}, seguidas y con puntos`;
+      b.onclick = () => setCup(c.id);
+      tracks.append(b);
+      cards.push({ id: c.id, cup: true, btn: b });
+    };
+    for (const t of ordered) {
+      trackCard(t);
+      const ci = cupOf(t.id);
+      if (ci >= 0 && CUPS[ci].tracks[CUPS[ci].tracks.length - 1] === t.id) cupCard(CUPS[ci]);
+    }
     card.append(trackRow);
 
     const opts = el('div', 'pgp-opts');
@@ -673,8 +698,7 @@ export class Hud {
       const ch = CHARACTERS[s.charIndex];
       powerInfo.innerHTML = `<b>${displayName(ch)}</b> · ${ch.power}: ${ch.powerDesc.toLowerCase()}`;
       charBtns.forEach((b, i) => b.classList.toggle('sel', i === s.charIndex));
-      trackBtns.forEach((b, i) => b.classList.toggle('sel', !s.cup && TRACKS[i].id === s.trackId));
-      cupBtn.classList.toggle('sel', s.cup);
+      for (const c of cards) c.btn.classList.toggle('sel', c.cup ? c.id === s.cup : !s.cup && c.id === s.trackId);
       cpuBtns.forEach((b, i) => b.classList.toggle('sel', CPU_LEVELS[i].id === s.cpu.id));
       lapBtns.forEach((b, i) => b.classList.toggle('sel', [2, 3][i] === s.laps));
     };
@@ -683,27 +707,26 @@ export class Hud {
       refresh();
       onChange({ ...s });
     };
-    const readyIds = TRACKS.filter((t) => t.ready).map((t) => t.id);
     const setTrack = (id: string): void => {
       if (id === s.trackId && !s.cup) return;
       s.trackId = id;
-      s.cup = false;
+      s.cup = null;
       refresh();
       onChange({ ...s });
     };
-    const setCup = (): void => {
-      if (s.cup) return;
-      s.cup = true;
+    const setCup = (id: string): void => {
+      if (s.cup === id) return;
+      s.cup = id;
       refresh();
       onChange({ ...s });
     };
     const stepTrack = (d: number): void => {
-      // Las pistas y, al final, la copa.
-      const opts = [...readyIds, 'copa'];
-      const i = s.cup ? opts.length - 1 : readyIds.indexOf(s.trackId);
+      // En el orden de las tarjetas: cada copa tras sus pistas.
+      const opts = cards.filter((c) => !c.btn.disabled);
+      const i = opts.findIndex((c) => (c.cup ? c.id === s.cup : !s.cup && c.id === s.trackId));
       const next = opts[Math.max(0, Math.min(opts.length - 1, i + d))];
-      if (next === 'copa') setCup();
-      else setTrack(next);
+      if (next.cup) setCup(next.id);
+      else setTrack(next.id);
     };
     const setCpu = (lv: CpuLevel): void => {
       s.cpu = lv;
@@ -803,7 +826,7 @@ export class Hud {
     const mine = rows.find((r) => me.includes(r.char));
     const card = el('div', 'pgp-card pgp-results pgp-cup');
     card.style.width = 'min(560px, 100%)';
-    let title = `Copa Peluche · ${cup.raced} de ${cup.total}`;
+    let title = `${cup.def.name} · ${cup.raced} de ${cup.total}`;
     if (cup.done && mine && split) title = mine.rank === 1 ? `¡${mine.name} ganó la copa! 🏆` : mine.rank <= 3 ? `¡${mine.name}, ${ordinal(mine.rank)} en la copa! 🏆` : 'Copa terminada';
     else if (cup.done && mine) title = mine.rank === 1 ? '¡Ganaste la copa! 🏆' : mine.rank <= 3 ? `¡${ordinal(mine.rank)} en la copa! 🏆` : 'Copa terminada';
     card.append(el('h2', '', title));

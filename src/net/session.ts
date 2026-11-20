@@ -9,7 +9,7 @@ import type { Arena } from '../game/arena';
 import { NetHost, NetGuest, normalizeCode } from './net';
 import { RelayHost, RelayGuest, relayAvailable } from './relay';
 import { MAX_PLAYERS, PROTOCOL, type CupData, type LobbyPlayer, type Msg, type RosterEntry } from './protocol';
-import { Cup } from '../game/cup';
+import { Cup, isCupId } from '../game/cup';
 
 export interface SessionHooks {
   /** Cambió la sala de espera: volver a dibujarla. */
@@ -36,7 +36,7 @@ export class Session {
   me = 0;
   laps = 3;
   cpu = 'facil';
-  /** Pista elegida en la sala, o 'copa'. */
+  /** Pista elegida en la sala, o el id de una copa. */
   track = 'cuarto';
   /** Copa en curso (en el anfitrión es la que manda; en los invitados, la última recibida). */
   cup: Cup | null = null;
@@ -269,9 +269,9 @@ export class Session {
     }
     let track = this.track;
     let cup: CupData | undefined;
-    if (this.track === 'copa') {
-      if (!this.cup || this.cup.done) {
-        this.cup = new Cup(roster.map((r) => ({ char: r.char, name: r.name || CHARACTERS.find((c) => c.id === r.char)!.defaultName })));
+    if (isCupId(this.track)) {
+      if (!this.cup || this.cup.done || this.cup.id !== this.track) {
+        this.cup = new Cup(roster.map((r) => ({ char: r.char, name: r.name || CHARACTERS.find((c) => c.id === r.char)!.defaultName })), this.track);
       }
       track = this.cup.trackId;
       // Parrilla de copa: el último de la clasificación sale primero (el puesto de salida es el slot).

@@ -1,9 +1,28 @@
-// "Copa Peluche": las tres pistas seguidas, con puntos por carrera. Lógica pura (sin three.js ni DOM),
+// Copas: tres pistas seguidas, con puntos por carrera. Lógica pura (sin three.js ni DOM),
 // la comprueba `npm run check:copa`. Los puntos se guardan por peluche: si un jugador se va en línea,
 // la IA sigue con su peluche y con sus puntos.
 import type { Species } from '../core/events';
 
-export const CUP_TRACKS = ['cuarto', 'bano', 'jardin'] as const;
+export interface CupDef {
+  /** Identificador estable (se guarda en los ajustes y viaja por la red como "pista" de la sala). */
+  id: string;
+  name: string;
+  /** Nombre corto para la tarjeta del menú. */
+  short: string;
+  icon: string;
+  /** Una línea para el menú. */
+  blurb: string;
+  tracks: readonly string[];
+}
+
+export const CUPS: readonly CupDef[] = [
+  { id: 'copa', name: 'Copa Peluche', short: 'Copa', icon: '🏆', blurb: 'Cuarto, Bañera y Jardín', tracks: ['cuarto', 'bano', 'jardin'] },
+  { id: 'copa-escuela', name: 'Copa Escuelita', short: 'Escuela', icon: '🎒', blurb: 'Aula, Recreo y Comedor', tracks: ['aula', 'recreo', 'comedor'] },
+];
+
+/** La copa con ese id (o nada si no es una copa). */
+export const cupDef = (id: string | null | undefined): CupDef | undefined => CUPS.find((c) => c.id === id);
+export const isCupId = (id: string | null | undefined): boolean => !!cupDef(id);
 /** Puntos del 1.º al 6.º. */
 export const CUP_POINTS = [10, 8, 6, 4, 3, 2];
 
@@ -26,12 +45,18 @@ export class Cup {
   raced = 0;
   private rows = new Map<Species, CupRow>();
 
-  constructor(entrants: { char: Species; name: string }[]) {
+  readonly def: CupDef;
+
+  constructor(
+    entrants: { char: Species; name: string }[],
+    readonly id = CUPS[0].id,
+  ) {
+    this.def = cupDef(id) ?? CUPS[0];
     entrants.forEach((e, i) => this.rows.set(e.char, { char: e.char, name: e.name, points: 0, last: 0, lastPlace: 0, wins: 0, prevRank: i + 1, rank: i + 1 }));
   }
 
   get total(): number {
-    return CUP_TRACKS.length;
+    return this.def.tracks.length;
   }
 
   get done(): boolean {
@@ -40,7 +65,7 @@ export class Cup {
 
   /** Pista de la carrera que toca (o la última si ya terminó). */
   get trackId(): string {
-    return CUP_TRACKS[Math.min(this.raced, this.total - 1)];
+    return this.def.tracks[Math.min(this.raced, this.total - 1)];
   }
 
   /** Suma una carrera: `order` = peluches del 1.º al último. Quien no esté en la lista no suma. */
@@ -85,12 +110,12 @@ export class Cup {
   }
 
   /** Para enviarla por la red. */
-  toJSON(): { raced: number; rows: CupRow[] } {
-    return { raced: this.raced, rows: [...this.rows.values()] };
+  toJSON(): { id: string; raced: number; rows: CupRow[] } {
+    return { id: this.def.id, raced: this.raced, rows: [...this.rows.values()] };
   }
 
-  static fromJSON(d: { raced: number; rows: CupRow[] }): Cup {
-    const c = new Cup([]);
+  static fromJSON(d: { id?: string; raced: number; rows: CupRow[] }): Cup {
+    const c = new Cup([], d.id);
     c.raced = d.raced;
     for (const r of d.rows) c.rows.set(r.char, { ...r });
     return c;

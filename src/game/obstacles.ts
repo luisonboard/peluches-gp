@@ -23,6 +23,8 @@ interface Mover {
   y: number;
   z: number;
   root: THREE.Group;
+  /** Pelota o naranja: rueda en vez de caminar. */
+  roll: THREE.Object3D | null;
 }
 
 export class Obstacles {
@@ -37,17 +39,18 @@ export class Obstacles {
     this.group.name = 'obstaculos';
     const defs = track.def.movers ?? [];
     if (!defs.length) return;
-    for (const def of defs) {
+    const look = track.def.moverLook ?? 'duck';
+    defs.forEach((def, n) => {
       const root = new THREE.Group();
-      const duck = makeDuck(shadows);
-      root.add(duck);
+      const body = look === 'duck' ? makeDuck(shadows) : makeRollingBall(look, n, shadows);
+      root.add(body);
       root.scale.setScalar(def.r / 1.6);
       this.group.add(root);
       const i = track.indexAtSeg(def.seg, def.f);
       const hazard: Hazard = { i, lat: 0, vLat: 0, r: def.r, range: 0 };
       this.hazards.push(hazard);
-      this.movers.push({ def, i, hazard, x: 0, y: 0, z: 0, root });
-    }
+      this.movers.push({ def, i, hazard, x: 0, y: 0, z: 0, root, roll: look === 'duck' ? null : body.children[0] });
+    });
     this.update(0, []);
   }
 
@@ -65,10 +68,17 @@ export class Obstacles {
       m.x = s.x + s.nx * lat;
       m.y = s.y;
       m.z = s.z + s.nz * lat;
-      m.root.position.set(m.x, m.y + Math.abs(Math.sin(a * 3)) * 0.25, m.z);
-      // Mira hacia donde camina (a lo ancho de la pista) y se balancea.
-      const dir = vLat >= 0 ? 1 : -1;
-      m.root.rotation.set(0, Math.atan2(s.nx * dir, s.nz * dir), Math.sin(a * 6) * 0.08);
+      if (m.roll) {
+        // Pelota: rueda a lo ancho de la pista dando botecitos.
+        m.root.position.set(m.x, m.y + Math.abs(Math.sin(a * 2)) * 0.6, m.z);
+        m.root.rotation.set(0, Math.atan2(s.nx, s.nz), 0);
+        m.roll.rotation.x = lat / m.def.r;
+      } else {
+        m.root.position.set(m.x, m.y + Math.abs(Math.sin(a * 3)) * 0.25, m.z);
+        // Mira hacia donde camina (a lo ancho de la pista) y se balancea.
+        const dir = vLat >= 0 ? 1 : -1;
+        m.root.rotation.set(0, Math.atan2(s.nx * dir, s.nz * dir), Math.sin(a * 6) * 0.08);
+      }
       for (const k of karts) this.collide(m, k);
     }
   }
@@ -99,6 +109,38 @@ export class Obstacles {
   get positions(): { x: number; z: number }[] {
     return this.movers.map((m) => ({ x: m.x, z: m.z }));
   }
+}
+
+/**
+ * Pelota de colores (gajos) o naranja (con hojita), de radio 1,6 y apoyada en el suelo. El pivote del grupo
+ * está en el centro de la esfera para que pueda rodar: es el primer hijo del grupo que se devuelve.
+ */
+function makeRollingBall(look: 'ball' | 'orange', n: number, shadows: boolean): THREE.Group {
+  const outer = new THREE.Group();
+  const ball = new THREE.Group();
+  ball.position.y = 1.6;
+  outer.add(ball);
+  if (look === 'orange') {
+    const peel = new THREE.MeshStandardMaterial({ color: 0xff9a1f, roughness: 0.75 });
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1.6, 20, 14), peel);
+    m.castShadow = shadows;
+    ball.add(m);
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), new THREE.MeshStandardMaterial({ color: 0x3fa53a, roughness: 0.6 }));
+    leaf.scale.set(1, 0.25, 0.55);
+    leaf.position.set(0.25, 1.62, 0);
+    ball.add(leaf);
+  } else {
+    const cols = [[0xe8423a, 0xffd23a], [0x2f7de0, 0xf6f3ee], [0x3fb24a, 0xff8a1a], [0x8a4fd8, 0xffd23a]][n % 4];
+    for (let k = 0; k < 6; k++) {
+      // Seis gajos alrededor del eje de rodadura (X), de dos colores alternos.
+      const geo = new THREE.SphereGeometry(1.6, 6, 14, (k * Math.PI) / 3, Math.PI / 3);
+      geo.rotateZ(Math.PI / 2);
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: cols[k % 2], roughness: 0.4 }));
+      m.castShadow = shadows;
+      ball.add(m);
+    }
+  }
+  return outer;
 }
 
 /** Patito de goma (≈ 3,3 m de alto, mira hacia +Z). Materiales y geometrías propios: se liberan con su grupo. */

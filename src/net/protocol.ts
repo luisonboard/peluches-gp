@@ -1,11 +1,12 @@
 // Mensajes entre dispositivos. Topología en estrella: los invitados hablan con el anfitrión y él reenvía.
 import type { ItemId, Species } from '../core/events';
 
-/** 2: la sala y el inicio llevan la pista. 3: copa de 3 carreras. */
-export const PROTOCOL = 4;
+/** 2: la sala y el inicio llevan la pista. 3: copa de 3 carreras. 5: varias copas (la copa lleva su id). */
+export const PROTOCOL = 5;
 
 /** Copa en curso tal como viaja por la red (ver game/cup.ts). */
 export interface CupData {
+  id: string;
   raced: number;
   rows: import('../game/cup').CupRow[];
 }
@@ -42,7 +43,7 @@ export const HIT_CODES = ['', 'spin', 'stuck', 'bubble', 'shrink', 'tumble', 'fr
 export type Msg =
   | { t: 'hello'; v: number; name: string; char: Species }
   | { t: 'reject'; why: string }
-  /** `track` puede ser 'copa'. */
+  /** `track` puede ser el id de una copa ('copa', 'copa-escuela'). */
   | { t: 'lobby'; players: LobbyPlayer[]; laps: number; cpu: string; track: string; you: number; racing: boolean }
   | { t: 'pick'; char: Species; name: string }
   /** `track`: pista de esta carrera. `cup`: copa en curso (si es una copa). */

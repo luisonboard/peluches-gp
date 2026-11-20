@@ -72,8 +72,8 @@ puesto, vuelta, objeto y barra de poder. La carrera se ve en el computador. Para
 | `?cam=free` | Cámara quieta, para moverla desde DevTools (`__game.camera`) |
 | `?seed=texto` | Semilla de lo procedural |
 | `?perfil=peque\|normal` | Aplica un perfil al cargar |
-| `?track=cuarto\|bano\|jardin` | Pista al cargar |
-| `?copa` | Elige la copa de 3 carreras (con `?autostart`, empieza sola) |
+| `?track=cuarto\|bano\|jardin\|aula\|recreo\|comedor` | Pista al cargar |
+| `?copa` | Elige la Copa Peluche de 3 carreras (con `?autostart`, empieza sola). `?copa=escuela`: la Copa Escuelita |
 | `?split` | Abre la pantalla dividida (con `?autostart`, empieza con teclado + mando 0; con `?bench`, mide en pantalla dividida). `?split=3` o `?split=4`: con 3 o 4 jugadores (teclado + mandos 0, 1 y 2) |
 | `?touch` | Muestra los botones táctiles aunque no sea un teléfono |
 | `?sala=ABCD` | Entra directamente a esa sala (lo usa el QR) |
@@ -320,6 +320,38 @@ el perfil y decir «listo», el teclado como jugador 2. En la carrera, Acelerar 
 su kart. La pausa desde el teléfono y «Seguir» con OK funcionan. Recargar el teléfono a media carrera lo devuelve
 como «Teléfono 1» a su kart. La versión compilada abre el mando sin cargar el juego. `window.__errors` vacío.
 Falta: la prueba con un iPhone y un Android reales (giroscopio, retraso por el relevo y vibración).
+
+**Copa Escuelita** (fase 2): una segunda copa de 3 pistas sobre la escuelita.
+
+- Copas en `src/game/cup.ts` (`CUPS`): cada una con id, nombre, ícono y sus tres pistas. `Cup` recibe el id de su
+  copa y lo lleva al viajar por la red (protocolo 5; una copa sin id es la Copa Peluche). Los ajustes guardan la
+  copa elegida (`settings.cup`: id o `null`; el `true` de antes pasa a `'copa'`). En la sala en línea, la "pista"
+  puede ser el id de cualquier copa.
+- Título: una fila por copa (sus tres pistas y la copa al final: 🏆 Copa Peluche y 🎒 Copa Escuelita). En pantallas
+  bajas (teléfono en horizontal) «Rivales» y «Vueltas» van al lado de sus botones y se oculta «Elige tu peluche»,
+  para que las dos filas quepan sin desplazar.
+- Pistas (`src/world/schoolTracks.ts`; escenarios en `classroom.ts`, `playground.ts` y `cafeteria.ts`, con piezas
+  comunes en `schoolKit.ts`):
+  - **El Aula** (`aula`, ≈ 940 m): baldosas entre pupitres con sillas, subida por una pila de libros a la mesa de
+    la maestra (manzana gigante), vuelta por encima y bajada por una regla. Pizarra con dibujos de tiza,
+    abecedario, reloj, ventanas, globo terráqueo, mochilas, crayones, lápices y gomas. Charcos de pegamento.
+  - **Patio de Recreo** (`recreo`, de día): túnel de gusano con cara sonriente, arenero con balde, pala y castillo
+    de arena, salto sobre una **piscina de pelotas** (quien cae reaparece al otro lado, «¡A la piscina de
+    pelotas!»), puente entre dos torres de castillo con banderines y bache del sube y baja. Pelotas de colores que
+    cruzan la pista rodando. Columpios, tobogán, tiovivo, rayuela, árboles, cerca de colores y el edificio con el
+    letrero «Mi Escuelita».
+  - **El Comedor** (`comedor`): subida por una bandeja a una mesa larga con mantel de cuadros, **salto de una
+    mesa a otra** (quien cae va «¡Al suelo!» y reaparece en la segunda), bajada por una servilleta. Jugo derramado
+    («¡Jugo!»), naranjas que ruedan, platos con sándwiches y arroz, vasos, cajitas de jugo, sillas, loncheras,
+    cartón de leche, plátano, galletas, mostrador con bandejas y pizarra con el menú del día.
+- Nuevo en las pistas: `moverLook` (patito, pelota o naranja), `look.slick` (colores y palabra de los charcos) y
+  `look.fall` (palabra y color de la caída en un hueco).
+
+Comprobado: 3 carreras por pista con `?autoplay&speed=8&cpu=normal`: todas terminan con los 7 karts y nadie
+parado más de 0,4 s; vueltas del jugador automático de ≈ 29 s (Aula), ≈ 30 s (Recreo) y ≈ 34 s (Comedor).
+Copa entera con `?copa=escuela&autostart&autoplay`: Aula → Recreo → Comedor, tabla «Copa Escuelita» entre carreras
+y podio final. `npm run check:copa` prueba la nueva copa y la copia por la red. Triángulos en Bajo: Aula 68 k,
+Recreo 85 k, Comedor 82 k (Jardín 105 k).
 
 **Pantalla dividida de 3 y 4 jugadores, con optimizaciones para que el equipo no se caliente** (fase 2):
 
