@@ -232,30 +232,44 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
     }
   };
 
+  /** Perrito de los peluches de la foto (Copito y Canelo): misma forma, distinta paleta. */
+  const heeler = (pal: { hood: number; earIn: number; muzzle: number; nose: number; hands: number; tail: number; tailTip: number }): void => {
+    const hood = M.fur(pal.hood);
+    // Cuerpo en forma de pera con la barriga clara casi cuadrada.
+    b.sph(fur, [0, 0.5, 0], [0.52, 0.6, 0.46]);
+    b.mesh(new RoundedBoxGeometry(0.56, 0.58, 0.2, 3, 0.09), acc, [0, 0.48, 0.32], [1, 1, 1]);
+    head = b.group([0, 1.34, 0]);
+    // Cabeza alta: cara del color del cuerpo y una "capucha" oscura que cubre la parte de arriba y los lados.
+    b.sph(fur, [0, 0, 0], [0.64, 0.6, 0.52], undefined, head);
+    b.sph(hood, [0, 0.13, -0.03], [0.67, 0.56, 0.5], undefined, head);
+    // Raya clara que sube por la frente entre los ojos, y las dos cejas redondas.
+    b.sph(fur, [0, 0.36, 0.4], [0.11, 0.28, 0.1], [-0.35, 0, 0], head);
+    for (const sx of [-1, 1]) {
+      b.sph(acc, [sx * 0.24, 0.42, 0.35], [0.14, 0.08, 0.1], [-0.3, 0, -sx * 0.2], head);
+      // Ojos grandes blancos con pupila negra, como los bordados del peluche.
+      b.eye([sx * 0.22, 0.17, 0.45], 0.14, 0x111118, head);
+      // Orejas altas en punta, oscuras por fuera y claras por dentro.
+      const ear = b.group([sx * 0.32, 0.52, -0.06], [0, 0, -sx * 0.14], head);
+      b.mesh(CONE, hood, [0, 0.28, 0], [0.27, 0.58, 0.14], undefined, ear);
+      b.mesh(CONE, M.fur(pal.earIn), [0, 0.22, 0.08], [0.15, 0.36, 0.05], undefined, ear);
+      ears.push(ear);
+    }
+    // Hocico abultado, nariz triangular y sonrisa.
+    b.sph(M.fur(pal.muzzle), [0, -0.12, 0.38], [0.3, 0.22, 0.26], undefined, head);
+    b.mesh(CONE, M.flat(pal.nose, 0.45), [0, -0.04, 0.62], [0.12, 0.11, 0.06], [-0.2, 0, Math.PI], head);
+    b.mesh(new THREE.TorusGeometry(0.09, 0.012, 6, 16, Math.PI), M.flat(0x3a2a20, 0.6), [0, -0.12, 0.6], [1, 0.8, 1], [0.35, 0, Math.PI], head);
+    armPair(fur, 0.8, 0.46, 0.11, M.fur(pal.hands));
+    // Colita corta con la punta clara.
+    const tail = b.group([0, 0.35, -0.42]);
+    b.mesh(CONE, M.fur(pal.tail), [0, 0.2, -0.05], [0.12, 0.42, 0.12], [-0.6, 0, 0], tail);
+    b.sph(M.fur(pal.tailTip), [0, 0.37, -0.17], [0.06, 0.07, 0.06], undefined, tail);
+    tails.push(tail);
+  };
+
   switch (c.id) {
     case 'perro': {
-      // Perro café: barriga y hocico claros, orejas en punta, mancha clara en un ojo.
-      b.sph(fur, [0, 0.5, 0], [0.56, 0.62, 0.5]);
-      b.sph(acc, [0, 0.46, 0.3], [0.4, 0.44, 0.22]);
-      head = b.group([0, 1.3, 0]);
-      b.sph(fur, [0, 0.05, 0], [0.62, 0.55, 0.54], undefined, head);
-      b.sph(acc, [0, -0.12, 0.42], [0.34, 0.25, 0.26], undefined, head);
-      b.sph(M.flat(0x3a2414, 0.5), [0, -0.02, 0.66], [0.13, 0.1, 0.09], undefined, head);
-      b.sph(acc, [0.2, 0.12, 0.42], [0.2, 0.22, 0.1], undefined, head);
-      b.eye([-0.2, 0.12, 0.47], 0.09, 0x2a1a10, head);
-      b.eye([0.2, 0.12, 0.5], 0.09, 0x2a1a10, head);
-      b.limb(acc, [-0.32, 0.3, 0.42], [-0.1, 0.26, 0.5], 0.035, head);
-      b.limb(acc, [0.32, 0.3, 0.42], [0.1, 0.26, 0.5], 0.035, head);
-      for (const sx of [-1, 1]) {
-        const ear = b.group([sx * 0.3, 0.4, -0.02], [0, 0, -sx * 0.22], head);
-        b.mesh(CONE, fur, [0, 0.3, 0], [0.22, 0.62, 0.13], undefined, ear);
-        b.mesh(CONE, acc, [0, 0.26, 0.06], [0.13, 0.42, 0.06], undefined, ear);
-        ears.push(ear);
-      }
-      armPair(fur, 0.82, 0.48, 0.12, acc);
-      const tail = b.group([0, 0.35, -0.45]);
-      b.mesh(CONE, fur, [0, 0.2, -0.05], [0.12, 0.45, 0.12], [-0.5, 0, 0], tail);
-      tails.push(tail);
+      // Perrito naranja, como el peluche: capucha y orejas rojizas, cara, cejas, hocico, barriga y patitas crema.
+      heeler({ hood: 0xe8642a, earIn: 0xf7deaa, muzzle: 0xf7deaa, nose: 0x5a3020, hands: c.accent, tail: 0xe8642a, tailTip: c.accent });
       break;
     }
     case 'esponja': {
@@ -370,45 +384,9 @@ export function buildPlush(c: CharacterDef, M: PlushMaterials): PlushRig {
       break;
     }
     case 'nieve': {
-      // Perrito de nieve (diseño propio): pelo azul hielo, hocico y barriga blancos, orejas redondas caídas,
-      // copo de nieve en la frente, mejillas rosadas, bufanda tejida morada y cola esponjosa enroscada.
-      b.sph(fur, [0, 0.5, 0], [0.54, 0.6, 0.5]);
-      b.sph(acc, [0, 0.45, 0.3], [0.38, 0.42, 0.22]);
-      const scarf = M.fur(0x7a5ad8);
-      b.mesh(new THREE.TorusGeometry(0.4, 0.1, 10, 28), scarf, [0, 0.92, 0.02], [1, 1, 1], [Math.PI / 2 - 0.12, 0, 0]);
-      b.limb(scarf, [0.18, 0.88, 0.38], [0.3, 0.5, 0.46], 0.09);
-      b.sph(M.fur(0xf6f3ee), [0.31, 0.44, 0.47], [0.08, 0.06, 0.08]);
-      head = b.group([0, 1.32, 0]);
-      b.sph(fur, [0, 0.04, 0], [0.6, 0.54, 0.54], undefined, head);
-      b.sph(acc, [0, -0.13, 0.4], [0.3, 0.22, 0.24], undefined, head);
-      b.sph(M.flat(0x2a3a5a, 0.4), [0, -0.04, 0.62], [0.11, 0.08, 0.08], undefined, head);
-      for (const sx of [-1, 1]) {
-        b.eye([sx * 0.2, 0.12, 0.47], 0.1, 0x1e3a6a, head);
-        b.sph(M.fur(0xf4a6c0), [sx * 0.34, -0.08, 0.38], [0.08, 0.06, 0.04], [0, sx * 0.6, 0], head);
-        // Orejas redondas y caídas a los lados.
-        const ear = b.group([sx * 0.46, 0.18, 0], [0, 0, sx * 0.5], head);
-        b.sph(fur, [0, -0.2, 0], [0.15, 0.3, 0.1], undefined, ear);
-        b.sph(acc, [0, -0.22, 0.05], [0.09, 0.2, 0.06], undefined, ear);
-        ears.push(ear);
-      }
-      // Copo de nieve bordado en la frente: seis brazos.
-      const flake = M.flat(0xffffff, 0.4, 0.3);
-      for (let i = 0; i < 3; i++) {
-        const a = (i / 3) * Math.PI;
-        const dx = Math.sin(a) * 0.1;
-        const dy = Math.cos(a) * 0.1;
-        b.limb(flake, [-dx, 0.36 - dy, 0.47], [dx, 0.36 + dy, 0.47], 0.018, head);
-      }
-      armPair(fur, 0.8, 0.46, 0.11, acc);
-      const tail = b.group([0, 0.4, -0.45]);
-      const curve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, 0.25, -0.25),
-        new THREE.Vector3(0, 0.55, -0.2),
-        new THREE.Vector3(0, 0.6, 0.02),
-      ]);
-      tail.add(new THREE.Mesh(taperedTube(curve, (u) => 0.08 + Math.sin(u * Math.PI) * 0.08), fur));
-      tails.push(tail);
+      // Perrito azul, como el peluche: capucha y orejas azul marino, orejas por dentro amarillas, raya y cejas
+      // celestes, ojos grandes blancos, hocico amarillo con nariz triangular azul marino, barriga y patitas claras.
+      heeler({ hood: 0x3e3a86, earIn: 0xf2c94a, muzzle: 0xf2c63a, nose: 0x262457, hands: c.accent, tail: 0x3e3a86, tailTip: c.accent });
       break;
     }
     case 'robot': {

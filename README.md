@@ -67,7 +67,7 @@ puesto, vuelta, objeto y barra de poder. La carrera se ve en el computador. Para
 | `?speed=4` | Subpasos de simulación por cuadro (carreras aceleradas para pruebas) |
 | `?cpu=facil\|normal\|dificil` | Dificultad de los rivales |
 | `?laps=2` | Número de vueltas |
-| `?char=zorro` | Peluche del jugador (`perro`, `esponja`, `raton`, `zorro`, `dino`, `robot`) |
+| `?char=zorro` | Peluche del jugador (`perro`, `esponja`, `raton`, `zorro`, `dino`, `robot`, `nieve`) |
 | `?cam=top` | Vista cenital de toda la pista |
 | `?cam=free` | Cámara quieta, para moverla desde DevTools (`__game.camera`) |
 | `?seed=texto` | Semilla de lo procedural |

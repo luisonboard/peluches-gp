@@ -28,7 +28,7 @@ Cada personaje tiene una
 
 | Peluche | Nombre por defecto | Poder | Efecto |
 |---|---|---|---|
-| Perro café | **Canelo** | Ladrido sónico | Una onda alrededor del kart hace girar a los rivales cercanos |
+| Perrito naranja | **Canelo** | Ladrido sónico | Una onda alrededor del kart hace girar a los rivales cercanos |
 | Esponja amarilla | **Esponjo** | Burbuja atrapadora | Lanza una burbuja hacia el rival de delante, que queda flotando 2 s |
 | Ratón eléctrico amarillo | **Chispa** | Rayo | Encoge y frena 3 s a todos los que van por delante |
 | Zorro naranja de nueve colas | **Kitsu** | Llama de zorro | Supervelocidad envuelta en fuego, invulnerable, aparta a quien toque |
