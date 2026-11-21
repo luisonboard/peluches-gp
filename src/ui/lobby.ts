@@ -30,6 +30,13 @@ const CSS = `
 .pgp-lobby .btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
 .pgp-lobby .btns .pgp-go { margin: 0; font-size: 22px; padding: 12px 28px; }
 .pgp-lobby .alt { background: #2f7de0 !important; box-shadow: 0 7px 0 #1d5aa8 !important; }
+.pgp-lobby .pgp-steps { margin-bottom: 10px; flex-wrap: wrap; }
+/* Pestaña «Pista»: una sección debajo de otra y los botones bajan de línea (sin desbordar a los lados). */
+.pgp-lobby .pgp-opts { display: block; }
+.pgp-lobby .pgp-opts > div { display: block; }
+.pgp-lobby .pgp-opts .pgp-row { flex-wrap: wrap; gap: 6px; }
+.pgp-lobby .pgp-opts .pgp-opt { white-space: nowrap; }
+.pgp-lobby .pgp-opts .pgp-label { margin: 8px 2px 2px; }
 .pgp-lobby .gray { background: #8a86a8 !important; box-shadow: 0 7px 0 #5f5b80 !important; }
 @media (max-height: 520px) {
   .pgp-lobby .code { font-size: 36px; }
@@ -47,6 +54,11 @@ const CSS = `
 
 let styled = false;
 let current: HTMLElement | null = null;
+
+/** Pestaña abierta de la sala de espera. Se guarda aquí porque la sala se vuelve a dibujar en cada cambio. */
+type LobbyTab = 'room' | 'char' | 'track';
+let lobbyTab: LobbyTab = 'room';
+let lobbyCode = '';
 
 function screen(): HTMLElement {
   if (!styled) {
@@ -119,7 +131,43 @@ export function showOnlineMenu(o: { code?: string; error?: string; busy?: string
 /** Sala de espera. Se vuelve a dibujar cada vez que cambia. */
 export function showLobby(s: Session, h: { pick: (c: Species) => void; options: (laps: number, cpu: string, track: string) => void; start: () => void; leave: () => void }): void {
   const card = screen();
-  card.innerHTML = `<h2>${s.isHost ? 'Tu sala' : 'Sala'}</h2>`;
+  // Sala nueva: empieza en la pestaña «Sala» (código y jugadores).
+  if (s.code !== lobbyCode) {
+    lobbyCode = s.code;
+    lobbyTab = 'room';
+  }
+  const tabs: [LobbyTab, string][] = [['room', 'Sala'], ['char', 'Peluche']];
+  if (s.isHost) tabs.push(['track', 'Pista']);
+  if (!tabs.some(([t]) => t === lobbyTab)) lobbyTab = 'room';
+  const bar = document.createElement('div');
+  bar.className = 'pgp-steps';
+  tabs.forEach(([t, label], i) => {
+    const b = document.createElement('button');
+    b.className = `pgp-step${t === lobbyTab ? ' on' : ''}`;
+    b.innerHTML = `<span class="n">${i + 1}</span>${label}`;
+    b.onclick = () => {
+      if (lobbyTab === t) return;
+      lobbyTab = t;
+      showLobby(s, h);
+    };
+    bar.append(b);
+  });
+  card.append(bar);
+
+  if (lobbyTab === 'room') roomTab(card, s);
+  else if (lobbyTab === 'char') charTab(card, s, h.pick);
+  else trackTab(card, s, h.options);
+
+  const btns = document.createElement('div');
+  btns.className = 'btns';
+  if (s.isHost) btns.append(btn('¡A correr!', '', h.start));
+  btns.append(btn(s.isHost ? 'Cerrar sala' : 'Salir', 'gray', h.leave));
+  card.append(btns);
+}
+
+/** Pestaña «Sala»: código, QR y quién está. */
+function roomTab(card: HTMLElement, s: Session): void {
+  card.insertAdjacentHTML('beforeend', `<h2>${s.isHost ? 'Tu sala' : 'Sala'}</h2>`);
   const row = document.createElement('div');
   row.className = 'code-row';
   row.innerHTML = `<div class="code">${s.code}</div>`;
@@ -159,7 +207,13 @@ export function showLobby(s: Session, h: { pick: (c: Species) => void; options: 
     pl.append(e);
   }
   card.append(pl);
+  if (!s.isHost) {
+    card.insertAdjacentHTML('beforeend', `<p class="hint">${escapeHtml(cupDef(s.track) ? `${cupDef(s.track)!.name} (3 pistas)` : TRACKS.find((t) => t.id === s.track)?.name ?? '')} · ${s.laps} vueltas · rivales ${CPU_LEVELS.find((l) => l.id === s.cpu)?.label ?? ''}</p>`);
+  }
+}
 
+/** Pestaña «Peluche»: cada jugador elige el suyo (los ya tomados salen ocupados). */
+function charTab(card: HTMLElement, s: Session, pick: (c: Species) => void): void {
   const lab = document.createElement('div');
   lab.className = 'pgp-label';
   lab.textContent = 'Tu peluche';
@@ -173,44 +227,37 @@ export function showLobby(s: Session, h: { pick: (c: Species) => void; options: 
     b.className = `pgp-char${c.id === mine ? ' sel' : ''}`;
     b.disabled = taken;
     b.innerHTML = `<div class="face" style="background:${cssColor(c.color)}"></div><div class="nm">${escapeHtml(displayName(c))}</div><div class="sp">${taken ? 'ocupado' : c.label}</div>`;
-    b.onclick = () => h.pick(c.id);
+    b.onclick = () => pick(c.id);
     chars.append(b);
   }
   card.append(chars);
+}
 
-  if (s.isHost) {
-    const opts = document.createElement('div');
-    opts.className = 'pgp-opts';
-    const mk = (label: string, values: [string, string][], cur: string, set: (v: string) => void): HTMLElement => {
-      const col = document.createElement('div');
-      col.innerHTML = `<div class="pgp-label">${label}</div>`;
-      const r = document.createElement('div');
-      r.className = 'pgp-row';
-      for (const [v, t] of values) {
-        const b = document.createElement('button');
-        b.className = `pgp-opt${v === cur ? ' sel' : ''}`;
-        b.textContent = t;
-        b.onclick = () => set(v);
-        r.append(b);
-      }
-      col.append(r);
-      return col;
-    };
-    opts.append(
-      mk('Pista', [...TRACKS.filter((t) => t.ready).map((t): [string, string] => [t.id, t.name]), ...CUPS.map((c): [string, string] => [c.id, `${c.icon} ${c.name}`])], s.track, (v) => h.options(s.laps, s.cpu, v)),
-      mk('Rivales de la IA', CPU_LEVELS.map((l) => [l.id, l.label]), s.cpu, (v) => h.options(s.laps, v, s.track)),
-      mk('Vueltas', [['2', '2'], ['3', '3']], String(s.laps), (v) => h.options(Number(v), s.cpu, s.track)),
-    );
-    card.append(opts);
-  } else {
-    card.insertAdjacentHTML('beforeend', `<p class="hint">${escapeHtml(cupDef(s.track) ? `${cupDef(s.track)!.name} (3 pistas)` : TRACKS.find((t) => t.id === s.track)?.name ?? '')} · ${s.laps} vueltas · rivales ${CPU_LEVELS.find((l) => l.id === s.cpu)?.label ?? ''}</p>`);
-  }
-
-  const btns = document.createElement('div');
-  btns.className = 'btns';
-  if (s.isHost) btns.append(btn('¡A correr!', '', h.start));
-  btns.append(btn(s.isHost ? 'Cerrar sala' : 'Salir', 'gray', h.leave));
-  card.append(btns);
+/** Pestaña «Pista» (solo el anfitrión): pista o copa, rivales y vueltas. */
+function trackTab(card: HTMLElement, s: Session, options: (laps: number, cpu: string, track: string) => void): void {
+  const opts = document.createElement('div');
+  opts.className = 'pgp-opts';
+  const mk = (label: string, values: [string, string][], cur: string, set: (v: string) => void): HTMLElement => {
+    const col = document.createElement('div');
+    col.innerHTML = `<div class="pgp-label">${label}</div>`;
+    const r = document.createElement('div');
+    r.className = 'pgp-row';
+    for (const [v, t] of values) {
+      const b = document.createElement('button');
+      b.className = `pgp-opt${v === cur ? ' sel' : ''}`;
+      b.textContent = t;
+      b.onclick = () => set(v);
+      r.append(b);
+    }
+    col.append(r);
+    return col;
+  };
+  opts.append(
+    mk('Pista', [...TRACKS.filter((t) => t.ready).map((t): [string, string] => [t.id, t.name]), ...CUPS.map((c): [string, string] => [c.id, `${c.icon} ${c.name}`])], s.track, (v) => options(s.laps, s.cpu, v)),
+    mk('Rivales de la IA', CPU_LEVELS.map((l) => [l.id, l.label]), s.cpu, (v) => options(s.laps, v, s.track)),
+    mk('Vueltas', [['2', '2'], ['3', '3']], String(s.laps), (v) => options(Number(v), s.cpu, s.track)),
+  );
+  card.append(opts);
 }
 
 function escapeHtml(t: string): string {
