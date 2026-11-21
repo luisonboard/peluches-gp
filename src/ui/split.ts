@@ -1,4 +1,5 @@
-// Pantalla dividida: "Pulsa un botón para unirte". De 2 a 4 jugadores: cada uno se une con su dispositivo (teclado o
+// Pantalla dividida, en dos pestañas como el menú de un jugador: «Jugadores» y «Pista» (pista o copa, rivales y vueltas).
+// Pestaña «Jugadores»: "Pulsa un botón para unirte". De 2 a 4 jugadores: cada uno se une con su dispositivo (teclado o
 // mando) y con ese mismo dispositivo elige peluche (◀ ▶), perfil (▲ ▼) y dice "listo" (B / Enter). Con cuatro listos
 // empieza sola; con dos o tres, cuando todos están listos, cualquiera vuelve a pulsar B / Enter (o «¡A correr!»).
 // Un teléfono también sirve de mando: se escanea el QR y se pulsa «¡Unirme!» en él (ver net/pad.ts y pad/phone.ts).
@@ -6,7 +7,10 @@ import { phoneQrBox, watchPhoneUrl } from './phoneQr';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
 import type { DeviceId, MenuEvent } from '../input/input';
 import { MAX_LOCAL, type Profile } from '../core/settings';
-import { LOCAL_COLORS } from './hud';
+import { LOCAL_COLORS, type TitleSetup } from './hud';
+import { CPU_LEVELS } from '../game/race';
+import { TRACKS } from '../world/tracks';
+import { CUPS, cupDef } from '../game/cup';
 
 export interface SplitPlayer {
   dev: DeviceId;
@@ -17,8 +21,10 @@ export interface SplitPlayer {
 export interface SplitDeps {
   /** Peluche y perfil guardados de cada jugador (al unirse empiezan así). */
   saved: { charIndex: number; profile: Profile }[];
-  /** Qué se va a correr ("Cuarto de Juegos · 3 vueltas · rivales Fácil"). */
-  summary: string;
+  /** Pista o copa, rivales y vueltas elegidos (los mismos del menú de un jugador). */
+  setup: () => TitleSetup;
+  /** Se cambió la pista, la copa, los rivales o las vueltas en la pestaña «Pista». */
+  onSetup: (s: TitleSetup) => void;
   deviceName: (dev: DeviceId) => string;
   /** Dirección para abrir el mando en un teléfono (se resuelve cuando la sala de mandos está abierta). */
   phoneUrl: Promise<{ url: string; code: string }>;
@@ -27,7 +33,14 @@ export interface SplitDeps {
 }
 
 const CSS = `
-.pgp-split { width: min(980px, 100%); }
+.pgp-split { width: min(980px, 100%); box-sizing: border-box; max-height: calc(100dvh - 32px); overflow-y: auto; }
+.pgp-split .pgp-steps { margin-bottom: 8px; flex-wrap: wrap; }
+/* Pestaña «Pista»: una sección debajo de otra y los botones bajan de línea (sin desbordar a los lados). */
+.pgp-split .pgp-opts { display: block; }
+.pgp-split .pgp-opts > div { display: block; }
+.pgp-split .pgp-opts .pgp-row { flex-wrap: wrap; gap: 6px; }
+.pgp-split .pgp-opts .pgp-opt { white-space: nowrap; }
+.pgp-split .pgp-opts .pgp-label { margin: 8px 2px 2px; }
 .pgp-split h2 { margin: 0 0 2px; text-align: center; font-size: 30px; }
 .pgp-split .sum { text-align: center; color: #6a64a0; font-weight: 800; margin-bottom: 12px; }
 .pgp-split .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
@@ -57,7 +70,16 @@ const CSS = `
 .pgp-split .btns .alt { background: #2f7de0; box-shadow: 0 7px 0 #1d5aa8; }
 .pgp-split .pgp-go:disabled { opacity: .45; cursor: default; }
 @media (max-height: 520px) {
-  .pgp-split h2 { font-size: 22px; }
+  .pgp-split h2 { display: none; }
+  .pgp-split .pgp-steps { margin-bottom: 4px; }
+  .pgp-split .col.empty .keys { display: none; }
+  .pgp-split .cols { gap: 6px; }
+  .pgp-split .pick { gap: 6px; }
+  .pgp-split .arrow { width: 30px; height: 30px; font-size: 14px; }
+  .pgp-split .nm { font-size: 15px; }
+  .pgp-split .prof .pgp-opt { padding: 3px 10px; font-size: 13px; }
+  .pgp-split .pgp-phoneqr .txt { font-size: 12px; }
+  .pgp-split .pgp-phoneqr .txt b { font-size: 14px; }
   .pgp-split .sum { margin-bottom: 6px; font-size: 13px; }
   .pgp-split .col { min-height: 0; padding: 8px; gap: 4px; }
   .pgp-split .who { font-size: 17px; }
@@ -66,7 +88,7 @@ const CSS = `
   .pgp-split .face { width: 40px; height: 40px; border-radius: 14px; }
   .pgp-split .face::before, .pgp-split .face::after { top: 13px; width: 8px; height: 9px; }
   .pgp-split .face::before { left: 8px } .pgp-split .face::after { right: 8px }
-  .pgp-split .btns { margin-top: 8px; }
+  .pgp-split .btns { margin-top: 2px; }
   .pgp-split .btns .pgp-go { font-size: 17px; padding: 8px 18px; }
 }
 `;
@@ -98,6 +120,45 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
     styled = true;
   }
   const slots: (Slot | null)[] = Array.from({ length: MAX_LOCAL }, () => null);
+  /** Pestaña abierta, y en «Pista» la fila elegida con el mando (0 pista, 1 rivales, 2 vueltas). */
+  let tab: 'players' | 'track' = 'players';
+  let optRow = 0;
+  /** Opciones de la pestaña «Pista», en orden: pistas listas y luego las copas. */
+  const places: [id: string, label: string, cup: boolean][] = [
+    ...TRACKS.filter((t) => t.ready).map((t): [string, string, boolean] => [t.id, t.name, false]),
+    ...CUPS.map((c): [string, string, boolean] => [c.id, `${c.icon} ${c.name}`, true]),
+  ];
+  const placeIdx = (st: TitleSetup): number => Math.max(0, places.findIndex(([id, , cup]) => (cup ? st.cup === id : !st.cup && st.trackId === id)));
+  const setPlace = (i: number): void => {
+    const st = d.setup();
+    const [id, , cup] = places[Math.max(0, Math.min(places.length - 1, i))];
+    if (cup) st.cup = id;
+    else {
+      st.trackId = id;
+      st.cup = null;
+    }
+    d.onSetup(st);
+  };
+  const setCpu = (i: number): void => {
+    const st = d.setup();
+    st.cpu = CPU_LEVELS[Math.max(0, Math.min(CPU_LEVELS.length - 1, i))];
+    d.onSetup(st);
+  };
+  const setLaps = (n: number): void => {
+    const st = d.setup();
+    st.laps = n;
+    d.onSetup(st);
+  };
+  const summary = (): string => {
+    const st = d.setup();
+    const name = cupDef(st.cup)?.name ?? TRACKS.find((t) => t.id === st.trackId)?.name ?? '';
+    return `${name} · ${st.laps} vueltas · rivales ${st.cpu.label}`;
+  };
+  const showTab = (t: 'players' | 'track'): void => {
+    tab = t;
+    optRow = 0;
+    render();
+  };
   const screen = document.createElement('div');
   screen.className = 'pgp-screen dim';
   const card = document.createElement('div');
@@ -154,7 +215,57 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
   const render = (): void => {
     card.replaceChildren();
     const n = joined().length;
-    card.append(el('h2', '', `👥 ${Math.max(2, n)} jugadores`), el('div', 'sum', `${d.summary} · de 2 a ${MAX_LOCAL} jugadores`));
+    const bar = el('div', 'pgp-steps');
+    ([['players', `Jugadores${n ? ` (${n})` : ''}`], ['track', 'Pista']] as const).forEach(([t, label], i) => {
+      const b = el('button', `pgp-step${t === tab ? ' on' : ''}`);
+      b.innerHTML = `<span class="n">${i + 1}</span>${label}`;
+      b.onclick = () => t !== tab && showTab(t);
+      bar.append(b);
+    });
+    card.append(bar);
+    if (tab === 'players') playersTab(n);
+    else trackTab();
+    const btns = el('div', 'btns');
+    const go = el('button', 'pgp-go', '¡A correr!') as HTMLButtonElement;
+    go.disabled = !enough();
+    go.title = enough() ? '' : 'Faltan jugadores: se necesitan al menos 2';
+    go.onclick = start;
+    const bk = el('button', 'pgp-go alt', 'Volver');
+    bk.onclick = back;
+    btns.append(go, bk);
+    card.append(btns);
+  };
+
+  /** Pestaña «Pista»: pista o copa, rivales y vueltas. Con el mando: ▲ ▼ fila, ◀ ▶ cambia, B / Enter vuelve. */
+  const trackTab = (): void => {
+    const st = d.setup();
+    const opts = el('div', 'pgp-opts');
+    const mk = (row: number, label: string, values: [string, boolean][], set: (i: number) => void): void => {
+      const col = el('div');
+      col.append(el('div', 'pgp-label', label));
+      const r = el('div', `pgp-row${row === optRow ? ' focus' : ''}`);
+      values.forEach(([t, sel], i) => {
+        const b = el('button', `pgp-opt${sel ? ' sel' : ''}`, t);
+        b.onclick = () => {
+          optRow = row;
+          set(i);
+          render();
+        };
+        r.append(b);
+      });
+      col.append(r);
+      opts.append(col);
+    };
+    const pi = placeIdx(st);
+    mk(0, 'Pista o copa', places.map(([, t], i) => [t, i === pi]), setPlace);
+    mk(1, 'Rivales de la IA', CPU_LEVELS.map((l) => [l.label, l.id === st.cpu.id]), setCpu);
+    mk(2, 'Vueltas', [2, 3].map((v) => [String(v), v === st.laps]), (i) => setLaps([2, 3][i]));
+    card.append(opts, el('div', 'sum', 'Mando o teclado: ▲ ▼ elige la fila · ◀ ▶ cambia · B / Enter vuelve a «Jugadores»'));
+  };
+
+  /** Pestaña «Jugadores»: las cuatro columnas y el QR para usar un teléfono como mando. */
+  const playersTab = (n: number): void => {
+    card.append(el('h2', '', `👥 ${Math.max(2, n)} jugadores`), el('div', 'sum', `${summary()} · de 2 a ${MAX_LOCAL} jugadores`));
     const cols = el('div', 'cols');
     slots.forEach((s, i) => {
       const col = el('div', `col${s?.ready ? ' ready' : ''}${s ? '' : ' empty'}`);
@@ -186,27 +297,33 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
           prof.append(b);
         }
         col.append(prof);
-        col.append(el('div', 'state', s.ready ? '¡Listo!' : `◀ ▶ peluche · ▲ ▼ perfil · ${s.dev === 'kbd' ? 'Enter' : s.dev.startsWith('tel') ? 'OK' : 'B'}: listo`));
+        const ok = s.dev === 'kbd' ? 'Enter' : s.dev.startsWith('tel') ? 'OK' : 'B';
+        col.append(el('div', 'state', s.ready ? '¡Listo!' : `◀ ▶ peluche · ${i === 0 ? '▼ perfil · ▲ pista' : '▲ ▼ perfil'} · ${ok}: listo`));
       }
       cols.append(col);
     });
     card.append(cols);
     if (allReady()) card.append(el('div', 'allready', '¡Todos listos! Pulsa B / Enter otra vez para correr'));
     if (n < MAX_LOCAL) card.append(phoneQrBox(phone, '📱 ¿Sin mando? Usa un teléfono', 'Escanea el QR y toca «¡Unirme!» en el teléfono.'));
-    const btns = el('div', 'btns');
-    const go = el('button', 'pgp-go', '¡A correr!') as HTMLButtonElement;
-    go.disabled = !enough();
-    go.onclick = start;
-    const bk = el('button', 'pgp-go alt', 'Volver');
-    bk.onclick = back;
-    btns.append(go, bk);
-    card.append(btns);
   };
   render();
 
   const input = (events: MenuEvent[]): void => {
     if (closed || !events.length) return;
     for (const { dev, key } of events) {
+      if (tab === 'track') {
+        // Cualquier mando o el teclado maneja la pestaña «Pista».
+        const st = d.setup();
+        if (key === 'up') optRow = Math.max(0, optRow - 1);
+        else if (key === 'down') optRow = Math.min(2, optRow + 1);
+        else if (key === 'left' || key === 'right') {
+          const dir = key === 'left' ? -1 : 1;
+          if (optRow === 0) setPlace(placeIdx(st) + dir);
+          else if (optRow === 1) setCpu(CPU_LEVELS.findIndex((l) => l.id === st.cpu.id) + dir);
+          else setLaps(dir < 0 ? 2 : 3);
+        } else if (key === 'ok' || key === 'back') tab = 'players';
+        continue;
+      }
       const i = slots.findIndex((s) => s?.dev === dev);
       const s = slots[i];
       if (!s) {
@@ -215,7 +332,11 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
         continue;
       }
       if (key === 'left' || key === 'right') stepChar(i, key === 'left' ? -1 : 1);
-      else if (key === 'up' || key === 'down') {
+      else if (key === 'up' && i === 0) {
+        // El jugador 1 abre la pestaña «Pista» (los demás cambian el perfil con ▲ o ▼).
+        tab = 'track';
+        optRow = 0;
+      } else if (key === 'up' || key === 'down') {
         s.profile = s.profile === 'peque' ? 'normal' : 'peque';
         s.ready = false;
       } else if (key === 'ok') {

@@ -369,18 +369,7 @@ export function startGame(): void {
     touch.show(false);
     hud.showTitle(
       setup,
-      (s) => {
-        const charChanged = s.charIndex !== setup.charIndex;
-        const before = titleTrack();
-        Object.assign(setup, s);
-        storeSetup();
-        const trackChanged = loadTrack(titleTrack()) || before !== titleTrack();
-        if (charChanged || trackChanged) {
-          buildRace();
-          placeShowroomKart();
-        }
-        audio.click();
-      },
+      changeSetup,
       () => (setup.cup ? startCup() : startRace()),
       () => showSettings(showTitle),
       titleStatus(),
@@ -392,6 +381,20 @@ export function startGame(): void {
     hud.screenClass('title');
     podium.hide();
     audio.playMusic('menu');
+  }
+
+  /** Cambia peluche, pista, rivales o vueltas desde un menú: lo guarda y pone de fondo la pista y el kart elegidos. */
+  function changeSetup(s: TitleSetup): void {
+    const charChanged = s.charIndex !== setup.charIndex;
+    const before = titleTrack();
+    Object.assign(setup, s);
+    storeSetup();
+    const trackChanged = loadTrack(titleTrack()) || before !== titleTrack();
+    if (charChanged || trackChanged) {
+      buildRace();
+      placeShowroomKart();
+    }
+    audio.click();
   }
 
   /** Copa local: sus tres pistas seguidas. */
@@ -541,18 +544,12 @@ export function startGame(): void {
     input.rumble(strong, weak, ms, split ? split.devs[L] : undefined);
   }
 
-  function splitSummary(): string {
-    const cd = cupDef(setup.cup);
-    if (cd) return `${cd.name} · ${setup.laps} vueltas · rivales ${setup.cpu.label}`;
-    const t = trackEntry;
-    return `${t.name} · ${setup.laps} vueltas · rivales ${setup.cpu.label}`;
-  }
-
   function openSplit(): void {
     hud.closeScreen();
     join = openSplitJoin({
       saved: playerPrefs().map((p, i) => ({ charIndex: i ? p.charIndex : setup.charIndex, profile: p.profile })),
-      summary: splitSummary(),
+      setup: () => ({ ...setup }),
+      onSetup: changeSetup,
       deviceName: (d) => input.deviceName(d),
       phoneUrl: pads.start().then(() => ({ url: pads.url(), code: pads.code })),
       onStart: (players) => {
