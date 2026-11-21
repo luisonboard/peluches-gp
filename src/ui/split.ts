@@ -7,10 +7,10 @@ import { phoneQrBox, watchPhoneUrl } from './phoneQr';
 import { CHARACTERS, displayName, cssColor } from '../game/characters';
 import type { DeviceId, MenuEvent } from '../input/input';
 import { MAX_LOCAL, type Profile } from '../core/settings';
-import { LOCAL_COLORS, type TitleSetup } from './hud';
+import { LOCAL_COLORS, trackPicker, type TitleSetup, type TrackChoice } from './hud';
 import { CPU_LEVELS } from '../game/race';
 import { TRACKS } from '../world/tracks';
-import { CUPS, cupDef } from '../game/cup';
+import { cupDef } from '../game/cup';
 
 export interface SplitPlayer {
   dev: DeviceId;
@@ -35,12 +35,8 @@ export interface SplitDeps {
 const CSS = `
 .pgp-split { width: min(980px, 100%); box-sizing: border-box; max-height: calc(100dvh - 32px); overflow-y: auto; }
 .pgp-split .pgp-steps { margin-bottom: 8px; flex-wrap: wrap; }
-/* Pestaña «Pista»: una sección debajo de otra y los botones bajan de línea (sin desbordar a los lados). */
-.pgp-split .pgp-opts { display: block; }
-.pgp-split .pgp-opts > div { display: block; }
-.pgp-split .pgp-opts .pgp-row { flex-wrap: wrap; gap: 6px; }
-.pgp-split .pgp-opts .pgp-opt { white-space: nowrap; }
-.pgp-split .pgp-opts .pgp-label { margin: 8px 2px 2px; }
+/* Pestaña «Pista»: la cuadrícula del menú de un jugador; no tan ancha como las cuatro columnas de jugadores. */
+.pgp-split .pgp-trackpane { width: min(760px, 100%); margin: 0 auto; }
 .pgp-split h2 { margin: 0 0 2px; text-align: center; font-size: 30px; }
 .pgp-split .sum { text-align: center; color: #6a64a0; font-weight: 800; margin-bottom: 12px; }
 .pgp-split .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
@@ -123,15 +119,15 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
   /** Pestaña abierta, y en «Pista» la fila elegida con el mando (0 pista, 1 rivales, 2 vueltas). */
   let tab: 'players' | 'track' = 'players';
   let optRow = 0;
-  /** Opciones de la pestaña «Pista», en orden: pistas listas y luego las copas. */
-  const places: [id: string, label: string, cup: boolean][] = [
-    ...TRACKS.filter((t) => t.ready).map((t): [string, string, boolean] => [t.id, t.name, false]),
-    ...CUPS.map((c): [string, string, boolean] => [c.id, `${c.icon} ${c.name}`, true]),
-  ];
-  const placeIdx = (st: TitleSetup): number => Math.max(0, places.findIndex(([id, , cup]) => (cup ? st.cup === id : !st.cup && st.trackId === id)));
-  const setPlace = (i: number): void => {
+  /** ¿Es la pista o copa elegida? */
+  const isPlace = (c: TrackChoice): boolean => {
     const st = d.setup();
-    const [id, , cup] = places[Math.max(0, Math.min(places.length - 1, i))];
+    return c.cup ? st.cup === c.id : !st.cup && st.trackId === c.id;
+  };
+  /** Cuadrícula de pistas de la pestaña «Pista» (para moverse con el mando). */
+  let picker: ReturnType<typeof trackPicker> | null = null;
+  const setPlace = ({ id, cup }: TrackChoice): void => {
+    const st = d.setup();
     if (cup) st.cup = id;
     else {
       st.trackId = id;
@@ -236,9 +232,22 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
     card.append(btns);
   };
 
-  /** Pestaña «Pista»: pista o copa, rivales y vueltas. Con el mando: ▲ ▼ fila, ◀ ▶ cambia, B / Enter vuelve. */
+  /** Pestaña «Pista»: pista o copa (la cuadrícula del menú de un jugador), rivales y vueltas.
+   *  Con el mando: ▲ ▼ fila, ◀ ▶ cambia, B / Enter vuelve. */
   const trackTab = (): void => {
     const st = d.setup();
+    const pane = el('div', 'pgp-trackpane');
+    pane.append(el('div', 'pgp-label pgp-track-label', '¿Dónde corremos?'));
+    const trackRow = el('div', `pgp-row${optRow === 0 ? ' focus' : ''}`);
+    picker = trackPicker(isPlace, (c) => {
+      optRow = 0;
+      if (!isPlace(c)) setPlace(c);
+      render();
+    });
+    trackRow.append(picker.el);
+    const info = el('div', 'pgp-power-info');
+    info.innerHTML = picker.describe();
+    pane.append(trackRow, info);
     const opts = el('div', 'pgp-opts');
     const mk = (row: number, label: string, values: [string, boolean][], set: (i: number) => void): void => {
       const col = el('div');
@@ -256,11 +265,10 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
       col.append(r);
       opts.append(col);
     };
-    const pi = placeIdx(st);
-    mk(0, 'Pista o copa', places.map(([, t], i) => [t, i === pi]), setPlace);
-    mk(1, 'Rivales de la IA', CPU_LEVELS.map((l) => [l.label, l.id === st.cpu.id]), setCpu);
+    mk(1, 'Rivales', CPU_LEVELS.map((l) => [l.label, l.id === st.cpu.id]), setCpu);
     mk(2, 'Vueltas', [2, 3].map((v) => [String(v), v === st.laps]), (i) => setLaps([2, 3][i]));
-    card.append(opts, el('div', 'sum', 'Mando o teclado: ▲ ▼ elige la fila · ◀ ▶ cambia · B / Enter vuelve a «Jugadores»'));
+    pane.append(opts);
+    card.append(pane, el('div', 'sum', 'Mando o teclado: ▲ ▼ elige la fila · ◀ ▶ cambia · B / Enter vuelve a «Jugadores»'));
   };
 
   /** Pestaña «Jugadores»: las cuatro columnas y el QR para usar un teléfono como mando. */
@@ -318,7 +326,9 @@ export function openSplitJoin(d: SplitDeps): SplitJoin {
         else if (key === 'down') optRow = Math.min(2, optRow + 1);
         else if (key === 'left' || key === 'right') {
           const dir = key === 'left' ? -1 : 1;
-          if (optRow === 0) setPlace(placeIdx(st) + dir);
+          if (optRow === 0) {
+            if (picker) setPlace(picker.neighbor(dir));
+          }
           else if (optRow === 1) setCpu(CPU_LEVELS.findIndex((l) => l.id === st.cpu.id) + dir);
           else setLaps(dir < 0 ? 2 : 3);
         } else if (key === 'ok' || key === 'back') tab = 'players';

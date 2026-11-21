@@ -5,7 +5,8 @@ import { CPU_LEVELS } from '../game/race';
 import type { Species } from '../core/events';
 import type { Session } from '../net/session';
 import { TRACKS } from '../world/tracks';
-import { CUPS, cupDef } from '../game/cup';
+import { cupDef } from '../game/cup';
+import { trackPicker } from './hud';
 
 const CSS = `
 .pgp-lobby { width: min(720px, 100%); box-sizing: border-box; max-height: calc(100dvh - 32px); overflow-y: auto; }
@@ -31,12 +32,6 @@ const CSS = `
 .pgp-lobby .btns .pgp-go { margin: 0; font-size: 22px; padding: 12px 28px; }
 .pgp-lobby .alt { background: #2f7de0 !important; box-shadow: 0 7px 0 #1d5aa8 !important; }
 .pgp-lobby .pgp-steps { margin-bottom: 10px; flex-wrap: wrap; }
-/* Pestaña «Pista»: una sección debajo de otra y los botones bajan de línea (sin desbordar a los lados). */
-.pgp-lobby .pgp-opts { display: block; }
-.pgp-lobby .pgp-opts > div { display: block; }
-.pgp-lobby .pgp-opts .pgp-row { flex-wrap: wrap; gap: 6px; }
-.pgp-lobby .pgp-opts .pgp-opt { white-space: nowrap; }
-.pgp-lobby .pgp-opts .pgp-label { margin: 8px 2px 2px; }
 .pgp-lobby .gray { background: #8a86a8 !important; box-shadow: 0 7px 0 #5f5b80 !important; }
 @media (max-height: 520px) {
   .pgp-lobby .code { font-size: 36px; }
@@ -233,8 +228,19 @@ function charTab(card: HTMLElement, s: Session, pick: (c: Species) => void): voi
   card.append(chars);
 }
 
-/** Pestaña «Pista» (solo el anfitrión): pista o copa, rivales y vueltas. */
+/** Pestaña «Pista» (solo el anfitrión): la misma cuadrícula de pistas y copas del menú de un jugador, rivales y vueltas. */
 function trackTab(card: HTMLElement, s: Session, options: (laps: number, cpu: string, track: string) => void): void {
+  card.insertAdjacentHTML('beforeend', '<div class="pgp-label pgp-track-label">¿Dónde corremos?</div>');
+  // En la sala la pista o la copa es un solo id (no se repiten entre pistas y copas).
+  const picker = trackPicker(
+    (c) => c.id === s.track,
+    (c) => c.id !== s.track && options(s.laps, s.cpu, c.id),
+  );
+  const info = document.createElement('div');
+  info.className = 'pgp-power-info';
+  info.innerHTML = picker.describe();
+  card.append(picker.el, info);
+
   const opts = document.createElement('div');
   opts.className = 'pgp-opts';
   const mk = (label: string, values: [string, string][], cur: string, set: (v: string) => void): HTMLElement => {
@@ -253,8 +259,7 @@ function trackTab(card: HTMLElement, s: Session, options: (laps: number, cpu: st
     return col;
   };
   opts.append(
-    mk('Pista', [...TRACKS.filter((t) => t.ready).map((t): [string, string] => [t.id, t.name]), ...CUPS.map((c): [string, string] => [c.id, `${c.icon} ${c.name}`])], s.track, (v) => options(s.laps, s.cpu, v)),
-    mk('Rivales de la IA', CPU_LEVELS.map((l) => [l.id, l.label]), s.cpu, (v) => options(s.laps, v, s.track)),
+    mk('Rivales', CPU_LEVELS.map((l) => [l.id, l.label]), s.cpu, (v) => options(s.laps, v, s.track)),
     mk('Vueltas', [['2', '2'], ['3', '3']], String(s.laps), (v) => options(Number(v), s.cpu, s.track)),
   );
   card.append(opts);

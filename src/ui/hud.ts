@@ -741,50 +741,16 @@ export class Hud {
       card.replaceChildren(steps(2));
       card.append(el('div', 'pgp-label pgp-track-label', '¿Dónde corremos?'));
       const trackRow = el('div', 'pgp-row');
-      const tracks = el('div', 'pgp-tracks');
-      trackRow.append(tracks);
-      // Una fila por copa: sus tres pistas y la copa al final. Las pistas sin copa van detrás.
-      const cupOf = (id: string): number => CUPS.findIndex((c) => c.tracks.includes(id));
-      const ordered = [...TRACKS].sort((a, b) => {
-        const ca = cupOf(a.id) < 0 ? CUPS.length : cupOf(a.id);
-        const cb = cupOf(b.id) < 0 ? CUPS.length : cupOf(b.id);
-        return ca - cb || (ca < CUPS.length ? CUPS[ca].tracks.indexOf(a.id) - CUPS[ca].tracks.indexOf(b.id) : 0);
-      });
-      /** Tarjetas en el orden del menú: pistas (`track`) y copas (`cup`). */
-      const cards: { id: string; cup: boolean; btn: HTMLButtonElement }[] = [];
-      const isSel = (c: { id: string; cup: boolean }): boolean => (c.cup ? c.id === s.cup : !s.cup && c.id === s.trackId);
-      const trackCard = (t: (typeof TRACKS)[number]): void => {
-        const b = el('button', 'pgp-track');
-        if (t.ready) {
-          b.append(trackThumb(t));
-          b.onclick = () => (!s.cup && s.trackId === t.id ? start() : setTrack(t.id));
-        } else {
-          b.disabled = true;
-          b.append(el('div', 'lock', '🔒'));
-        }
-        const txt = el('div');
-        b.title = t.ready ? `${t.name}: ${t.blurb.toLowerCase()}` : `${t.name}: pronto`;
-        txt.append(el('div', 'nm', t.name), el('div', 'nm short', t.name.replace(/^El |^La /, '').split(' ')[0]), el('div', 'sp', t.ready ? t.blurb : 'Pronto'));
-        b.append(txt);
-        tracks.append(b);
-        cards.push({ id: t.id, cup: false, btn: b });
-      };
-      const cupCard = (c: (typeof CUPS)[number]): void => {
-        const b = el('button', 'pgp-track');
-        b.append(el('div', 'cupicon', c.icon));
-        const txt = el('div');
-        txt.append(el('div', 'nm', c.name), el('div', 'nm short', c.short), el('div', 'sp', c.blurb));
-        b.append(txt);
-        b.title = `${c.name}: ${c.blurb.toLowerCase()}, seguidas y con puntos`;
-        b.onclick = () => (s.cup === c.id ? start() : setCup(c.id));
-        tracks.append(b);
-        cards.push({ id: c.id, cup: true, btn: b });
-      };
-      for (const t of ordered) {
-        trackCard(t);
-        const ci = cupOf(t.id);
-        if (ci >= 0 && CUPS[ci].tracks[CUPS[ci].tracks.length - 1] === t.id) cupCard(CUPS[ci]);
-      }
+      const picker = trackPicker(
+        (c) => (c.cup ? c.id === s.cup : !s.cup && c.id === s.trackId),
+        (c) => {
+          // Tocar la ya elegida empieza la carrera.
+          if (c.cup ? s.cup === c.id : !s.cup && s.trackId === c.id) return start();
+          if (c.cup) setCup(c.id);
+          else setTrack(c.id);
+        },
+      );
+      trackRow.append(picker.el);
       // Qué se eligió, en palabras: una pista suelta o una copa de 3 carreras.
       const info = el('div', 'pgp-power-info');
 
@@ -812,10 +778,8 @@ export class Hud {
       lapCol.append(lapRow);
 
       const refresh = (): void => {
-        for (const c of cards) c.btn.classList.toggle('sel', isSel(c));
-        const cup = CUPS.find((c) => c.id === s.cup);
-        const t = TRACKS.find((x) => x.id === s.trackId);
-        info.innerHTML = cup ? `<b>${cup.icon} ${cup.name}</b> · ${cup.blurb}, seguidas y con puntos` : t ? `<b>${t.name}</b> · ${t.blurb}` : '';
+        picker.refresh();
+        info.innerHTML = picker.describe();
         cpuBtns.forEach((b, i) => b.classList.toggle('sel', CPU_LEVELS[i].id === s.cpu.id));
         lapBtns.forEach((b, i) => b.classList.toggle('sel', [2, 3][i] === s.laps));
       };
@@ -833,10 +797,7 @@ export class Hud {
         change();
       };
       const step = (d: number): void => {
-        // En el orden de las tarjetas: cada copa tras sus pistas.
-        const list = cards.filter((c) => !c.btn.disabled);
-        const i = list.findIndex(isSel);
-        const next = list[Math.max(0, Math.min(list.length - 1, i + d))];
+        const next = picker.neighbor(d);
         if (next.cup) setCup(next.id);
         else setTrack(next.id);
       };
@@ -1003,6 +964,84 @@ export class Hud {
 }
 
 /** Minimapa pequeño de la pista para su tarjeta del menú (la salida abajo, como en la carrera). */
+/** Una pista suelta o una copa (su id), como se elige en los menús. */
+export interface TrackChoice {
+  id: string;
+  cup: boolean;
+}
+
+/**
+ * Cuadrícula para elegir pista o copa (la misma en el menú de un jugador, la sala y la pantalla dividida): una fila por
+ * copa con el dibujo de sus tres pistas y la copa al final; las pistas sin copa van detrás.
+ * `isSel` dice cuál está elegida; `onPick` se llama al tocar una tarjeta (el menú decide qué hacer).
+ */
+export function trackPicker(
+  isSel: (c: TrackChoice) => boolean,
+  onPick: (c: TrackChoice) => void,
+): { el: HTMLElement; refresh: () => void; neighbor: (d: number) => TrackChoice; describe: () => string } {
+  const tracks = el('div', 'pgp-tracks');
+  const cupOf = (id: string): number => CUPS.findIndex((c) => c.tracks.includes(id));
+  const ordered = [...TRACKS].sort((a, b) => {
+    const ca = cupOf(a.id) < 0 ? CUPS.length : cupOf(a.id);
+    const cb = cupOf(b.id) < 0 ? CUPS.length : cupOf(b.id);
+    return ca - cb || (ca < CUPS.length ? CUPS[ca].tracks.indexOf(a.id) - CUPS[ca].tracks.indexOf(b.id) : 0);
+  });
+  /** Tarjetas en el orden del menú: pistas y copas. */
+  const cards: (TrackChoice & { btn: HTMLButtonElement })[] = [];
+  const trackCard = (t: (typeof TRACKS)[number]): void => {
+    const b = el('button', 'pgp-track');
+    if (t.ready) {
+      b.append(trackThumb(t));
+      b.onclick = () => onPick({ id: t.id, cup: false });
+    } else {
+      b.disabled = true;
+      b.append(el('div', 'lock', '🔒'));
+    }
+    const txt = el('div');
+    b.title = t.ready ? `${t.name}: ${t.blurb.toLowerCase()}` : `${t.name}: pronto`;
+    txt.append(el('div', 'nm', t.name), el('div', 'nm short', t.name.replace(/^El |^La /, '').split(' ')[0]), el('div', 'sp', t.ready ? t.blurb : 'Pronto'));
+    b.append(txt);
+    tracks.append(b);
+    cards.push({ id: t.id, cup: false, btn: b });
+  };
+  const cupCard = (c: (typeof CUPS)[number]): void => {
+    const b = el('button', 'pgp-track');
+    b.append(el('div', 'cupicon', c.icon));
+    const txt = el('div');
+    txt.append(el('div', 'nm', c.name), el('div', 'nm short', c.short), el('div', 'sp', c.blurb));
+    b.append(txt);
+    b.title = `${c.name}: ${c.blurb.toLowerCase()}, seguidas y con puntos`;
+    b.onclick = () => onPick({ id: c.id, cup: true });
+    tracks.append(b);
+    cards.push({ id: c.id, cup: true, btn: b });
+  };
+  for (const t of ordered) {
+    trackCard(t);
+    const ci = cupOf(t.id);
+    if (ci >= 0 && CUPS[ci].tracks[CUPS[ci].tracks.length - 1] === t.id) cupCard(CUPS[ci]);
+  }
+  const refresh = (): void => {
+    for (const c of cards) c.btn.classList.toggle('sel', isSel(c));
+  };
+  /** La tarjeta `d` puestos antes o después de la elegida (en el orden de las tarjetas, saltando las bloqueadas). */
+  const neighbor = (d: number): TrackChoice => {
+    const list = cards.filter((c) => !c.btn.disabled);
+    const i = list.findIndex(isSel);
+    const n = list[Math.max(0, Math.min(list.length - 1, i + d))];
+    return { id: n.id, cup: n.cup };
+  };
+  /** Qué se eligió, en palabras: una pista suelta o una copa de 3 carreras. */
+  const describe = (): string => {
+    const sel = cards.find(isSel);
+    if (!sel) return '';
+    const cup = sel.cup ? CUPS.find((c) => c.id === sel.id) : undefined;
+    const t = sel.cup ? undefined : TRACKS.find((x) => x.id === sel.id);
+    return cup ? `<b>${cup.icon} ${cup.name}</b> · ${cup.blurb}, seguidas y con puntos` : t ? `<b>${t.name}</b> · ${t.blurb}` : '';
+  };
+  refresh();
+  return { el: tracks, refresh, neighbor, describe };
+}
+
 function trackThumb(t: ReadyTrack): HTMLCanvasElement {
   const c = document.createElement('canvas');
   const W = 112;
