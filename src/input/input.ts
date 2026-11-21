@@ -252,4 +252,5 @@ const KEY_MENU: Record<string, MenuKey> = {
   Enter: 'ok',
   Space: 'ok',
   Backspace: 'back',
+  Escape: 'back',
 };

@@ -26,6 +26,19 @@ dirección: https://peluches-gp.luisonboard.workers.dev
   conexión directa (PeerJS).
 - Íconos: `icons-src/*.svg`, exportados a `public/icon-*.png`.
 
+## Menú
+
+El menú principal va en pasos para que no aparezca todo de golpe:
+
+1. **Inicio**: «🏁 ¡Jugar!» (muestra el peluche y la pista que quedaron elegidos), «👥 2–4 jugadores» (solo en
+   computador o tablet), «👫 Jugar con otros», y abajo, más pequeños, «📱 Mando», «⚙ Ajustes» y pantalla completa.
+2. **Paso 1 · Peluche**: los siete peluches con su poder. Tocar otra vez el peluche elegido pasa al paso 2.
+3. **Paso 2 · Pista**: pistas y copas (con una línea que dice qué se eligió), rivales y vueltas, y «¡A correr!».
+   Tocar otra vez la pista elegida empieza la carrera.
+
+Arriba de los pasos 1 y 2 se ve «1 Peluche · 2 Pista» (se puede tocar para saltar). «◀ Atrás», Esc o Retroceso
+vuelven al paso anterior; con el mando, flechas para moverse, B / Enter para seguir.
+
 ## Controles
 
 | Acción | Teclado | Mando (Switch Pro) |

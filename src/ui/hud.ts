@@ -54,7 +54,7 @@ const CSS = `
 .pgp-char .face::before, .pgp-char .face::after { content: ""; position: absolute; top: 18px; width: 10px; height: 12px; border-radius: 50%; background: #fff; box-shadow: inset 3px 2px 0 2px #1e2236; }
 .pgp-char .face::before { left: 12px } .pgp-char .face::after { right: 12px }
 .pgp-char .nm { font-weight: 900; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.pgp-char .sp { font-size: 11px; font-weight: 700; color: #6a64a0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pgp-char .sp { font-size: 11px; font-weight: 700; color: #6a64a0; line-height: 1.15; max-width: 100%; }
 .pgp-char.sel { border-color: #2a2050; background: #fff; transform: translateY(-2px); }
 .pgp-opt { border: 3px solid #d8d4ee; background: #fff; color: #2a2050; border-radius: 999px; padding: 8px 18px; font: inherit; font-weight: 900; font-size: 17px; cursor: pointer; }
 .pgp-opt.sel { background: #2a2050; color: #fff; border-color: #2a2050; }
@@ -87,7 +87,6 @@ const CSS = `
   .pgp-opt { padding: 5px 14px; font-size: 15px; }
   .pgp-go { font-size: 22px; padding: 8px 32px; margin: 10px auto 0; }
   .pgp-row .pgp-go { font-size: 16px !important; padding: 8px 14px !important; box-shadow: 0 5px 0 rgba(0,0,0,.22) !important; }
-  .pgp-screen.title .pgp-row[style*="margin-top"] { margin-top: 8px !important; }
 }
 .pgp-tracks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: 100%; }
 .pgp-track { border: 4px solid transparent; border-radius: 18px; background: #f1effa; padding: 6px 8px; cursor: pointer; font: inherit; color: inherit;
@@ -108,6 +107,50 @@ const CSS = `
   .pgp-track .nm { font-size: 14px; }
 }
 
+/* Menú en pasos: Inicio → 1 Peluche → 2 Pista. */
+.pgp-go.alt { background: #2f7de0; box-shadow: 0 7px 0 #1d5aa8; }
+.pgp-go.orange { background: #ff9a2a; box-shadow: 0 7px 0 #c26a10; }
+.pgp-go.pink { background: #f07ab0; box-shadow: 0 7px 0 #b84a80; }
+.pgp-go.teal { background: #1fa59a; box-shadow: 0 7px 0 #137168; }
+.pgp-go.purple { background: #8a4fd8; box-shadow: 0 7px 0 #5e2fa3; }
+.pgp-go.focus { outline: 4px solid #ffb52a; outline-offset: 4px; }
+.pgp-go small { display: block; font-size: 13px; font-weight: 800; opacity: .92; margin-top: 2px; }
+.pgp-go.big { width: 100%; margin: 4px 0 0; font-size: 36px; padding: 14px 20px 12px; }
+.pgp-go.big small { font-size: 15px; }
+.pgp-go.small { margin: 0; font-size: 18px; padding: 10px 20px; }
+.pgp-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-top: 20px; }
+.pgp-modes .pgp-go { margin: 0; font-size: 21px; padding: 12px 14px 10px; }
+.pgp-tools { display: flex; justify-content: center; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+.pgp-steps { display: flex; gap: 8px; justify-content: center; }
+.pgp-step { border: 0; background: #f1effa; border-radius: 999px; padding: 5px 16px 5px 5px; font: inherit; font-size: 16px; font-weight: 900; color: #6a64a0;
+  display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.pgp-step .n { width: 26px; height: 26px; border-radius: 50%; background: #d8d4ee; color: #fff; display: grid; place-items: center; font-size: 14px; }
+.pgp-step.on { background: #2a2050; color: #fff; }
+.pgp-step.on .n { background: #ffb52a; color: #2a2050; }
+.pgp-step.done .n { background: #3fb24a; }
+.pgp-nav { justify-content: space-between; align-items: center; margin-top: 18px; flex-wrap: nowrap; }
+.pgp-nav .pgp-go { white-space: nowrap; }
+@media (max-width: 620px) {
+  .pgp-nav .pgp-go.next { font-size: 21px; padding: 10px 22px; }
+  .pgp-nav .pgp-go.small { font-size: 16px; padding: 10px 14px; }
+  .pgp-char .nm { font-size: 13px; }
+  .pgp-char { padding: 8px 2px 6px; }
+  .pgp-opts .pgp-row { flex-wrap: nowrap; gap: 6px; }
+  .pgp-opts .pgp-opt { padding: 7px 12px; font-size: 15px; }
+}
+.pgp-nav .pgp-go { margin: 0; }
+.pgp-nav .next { font-size: 26px; padding: 12px 38px; }
+@media (max-height: 520px) {
+  .pgp-go.big { font-size: 24px; padding: 8px 16px 6px; }
+  .pgp-go.big small, .pgp-go small { font-size: 11px; }
+  .pgp-modes { margin-top: 12px; gap: 10px; }
+  .pgp-modes .pgp-go { font-size: 17px; padding: 7px 10px 6px; }
+  .pgp-tools { margin-top: 14px; gap: 8px; }
+  .pgp-go.small { font-size: 15px; padding: 6px 14px; }
+  .pgp-step { font-size: 13px; padding: 3px 12px 3px 3px; }
+  .pgp-step .n { width: 20px; height: 20px; font-size: 12px; }
+  .pgp-nav { margin-top: 10px; }
+}
 .pgp-cup td.mv { width: 22px; text-align: center; font-size: 15px; }
 .pgp-cup td.mv.up { color: #2f9a4a; } .pgp-cup td.mv.down { color: #d8423a; }
 .pgp-cup td.add { color: #2f9a4a; text-align: right; width: 44px; }
@@ -137,8 +180,6 @@ const CSS = `
   .pgp-track canvas, .pgp-track .lock, .pgp-track .cupicon { width: 36px; height: 26px; font-size: 14px; border-radius: 8px; }
   .pgp-track .nm { font-size: 12px; }
   .pgp-track .sp { display: none; }
-  .pgp-screen.title .pgp-row[style*="margin-top"] { flex-wrap: nowrap; gap: 8px !important; }
-  .pgp-screen.title .pgp-row[style*="margin-top"] .pgp-go { white-space: nowrap; padding: 8px 12px !important; }
 }
 #hud .hud-item { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%);
   display: grid; justify-items: center; gap: 6px; }
@@ -386,6 +427,8 @@ export class Hud {
   private screen: HTMLElement | null = null;
   private menuRows: { el: HTMLElement; left?: () => void; right?: () => void; ok?: () => void }[] = [];
   private focus = 0;
+  /** Paso anterior del menú (Esc / B del mando). */
+  private menuBack: (() => void) | null = null;
   private benchEl: HTMLElement | null = null;
   private flashEl = el('div');
   /** En pantallas táctiles no se muestran las teclas. */
@@ -533,6 +576,7 @@ export class Hud {
     this.screen?.remove();
     this.screen = null;
     this.menuRows = [];
+    this.menuBack = null;
   }
 
   get menuOpen(): boolean {
@@ -543,214 +587,283 @@ export class Hud {
   menuInput(keys: string[]): void {
     if (!this.menuRows.length) return;
     for (const k of keys) {
+      if (k === 'back') {
+        if (this.menuBack) {
+          this.menuBack();
+          return;
+        }
+        continue;
+      }
       const row = this.menuRows[this.focus];
+      if (!row) return;
       if (k === 'up') this.focus = Math.max(0, this.focus - 1);
       else if (k === 'down') this.focus = Math.min(this.menuRows.length - 1, this.focus + 1);
       else if (k === 'left') row.left?.();
       else if (k === 'right') row.right?.();
       else if (k === 'ok') (row.ok ?? this.menuRows[this.menuRows.length - 1].ok)?.();
-      this.menuRows.forEach((r, i) => r.el.classList.toggle('focus', i === this.focus));
     }
+    this.menuRows.forEach((r, i) => r.el.classList.toggle('focus', i === this.focus));
   }
 
+  /**
+   * Menú principal en pasos: Inicio (cómo jugar) → 1 Peluche → 2 Pista y opciones → ¡A correr!
+   * Cada paso cabe en la pantalla del teléfono sin desplazarse. Esc / B del mando vuelve al paso anterior.
+   */
   showTitle(setup: TitleSetup, onChange: (s: TitleSetup) => void, onStart: () => void, onSettings: () => void, status: string, onFullscreen: (() => void) | null, onOnline: () => void, onSplit: (() => void) | null = null, onPhone: (() => void) | null = null): void {
-    const wrap = el('div');
+    const wrap = el('div', 'pgp-title');
     wrap.style.width = 'min(760px, 100%)';
     const logo = el('div', 'pgp-logo');
     logo.innerHTML = [...'Peluches GP'].map((c) => `<span>${c === ' ' ? '&nbsp;' : c}</span>`).join('');
     const sub = el('div', 'pgp-sub', 'Carreras de peluches por toda la casa');
     const card = el('div', 'pgp-card');
     wrap.append(logo, sub, card);
-
-    card.append(el('div', 'pgp-label pgp-char-label', 'Elige tu peluche'));
-    const charRow = el('div', 'pgp-row');
-    const chars = el('div', 'pgp-chars');
-    chars.style.width = '100%';
-    charRow.append(chars);
-    const charBtns = CHARACTERS.map((c, i) => {
-      const b = el('button', 'pgp-char');
-      b.innerHTML = `<div class="face" style="background:${cssColor(c.color)}"></div><div class="nm">${displayName(c)}</div><div class="sp">${c.label}</div>`;
-      b.onclick = () => setChar(i);
-      chars.append(b);
-      return b;
-    });
-    card.append(charRow);
-    const powerInfo = el('div', 'pgp-power-info');
-    card.append(powerInfo);
-
-    card.append(el('div', 'pgp-label pgp-track-label', 'Pista'));
-    const trackRow = el('div', 'pgp-row');
-    const tracks = el('div', 'pgp-tracks');
-    trackRow.append(tracks);
-    // Una fila por copa: sus tres pistas y la copa al final. Las pistas sin copa van detrás.
-    const cupOf = (id: string): number => CUPS.findIndex((c) => c.tracks.includes(id));
-    const ordered = [...TRACKS].sort((a, b) => {
-      const ca = cupOf(a.id) < 0 ? CUPS.length : cupOf(a.id);
-      const cb = cupOf(b.id) < 0 ? CUPS.length : cupOf(b.id);
-      return ca - cb || (ca < CUPS.length ? CUPS[ca].tracks.indexOf(a.id) - CUPS[ca].tracks.indexOf(b.id) : 0);
-    });
-    /** Tarjetas en el orden del menú: pistas (`track`) y copas (`cup`). */
-    const cards: { id: string; cup: boolean; btn: HTMLButtonElement }[] = [];
-    const trackCard = (t: (typeof TRACKS)[number]): void => {
-      const b = el('button', 'pgp-track');
-      if (t.ready) {
-        b.append(trackThumb(t));
-        b.onclick = () => setTrack(t.id);
-      } else {
-        b.disabled = true;
-        b.append(el('div', 'lock', '🔒'));
-      }
-      const txt = el('div');
-      b.title = t.ready ? `${t.name}: ${t.blurb.toLowerCase()}` : `${t.name}: pronto`;
-      txt.append(el('div', 'nm', t.name), el('div', 'nm short', t.name.replace(/^El |^La /, '').split(' ')[0]), el('div', 'sp', t.ready ? t.blurb : 'Pronto'));
-      b.append(txt);
-      tracks.append(b);
-      cards.push({ id: t.id, cup: false, btn: b });
-    };
-    const cupCard = (c: (typeof CUPS)[number]): void => {
-      const b = el('button', 'pgp-track');
-      b.append(el('div', 'cupicon', c.icon));
-      const txt = el('div');
-      txt.append(el('div', 'nm', c.name), el('div', 'nm short', c.short), el('div', 'sp', c.blurb));
-      b.append(txt);
-      b.title = `${c.name}: ${c.blurb.toLowerCase()}, seguidas y con puntos`;
-      b.onclick = () => setCup(c.id);
-      tracks.append(b);
-      cards.push({ id: c.id, cup: true, btn: b });
-    };
-    for (const t of ordered) {
-      trackCard(t);
-      const ci = cupOf(t.id);
-      if (ci >= 0 && CUPS[ci].tracks[CUPS[ci].tracks.length - 1] === t.id) cupCard(CUPS[ci]);
-    }
-    card.append(trackRow);
-
-    const opts = el('div', 'pgp-opts');
-    const cpuCol = el('div');
-    const lapCol = el('div');
-    opts.append(cpuCol, lapCol);
-    card.append(opts);
-    cpuCol.append(el('div', 'pgp-label', 'Rivales'));
-    const cpuRow = el('div', 'pgp-row');
-    const cpuBtns = CPU_LEVELS.map((lv) => {
-      const b = el('button', 'pgp-opt', lv.label);
-      b.onclick = () => setCpu(lv);
-      cpuRow.append(b);
-      return b;
-    });
-    cpuCol.append(cpuRow);
-
-    lapCol.append(el('div', 'pgp-label', 'Vueltas'));
-    const lapRow = el('div', 'pgp-row');
-    const lapBtns = [2, 3].map((n) => {
-      const b = el('button', 'pgp-opt', String(n));
-      b.onclick = () => setLaps(n);
-      lapRow.append(b);
-      return b;
-    });
-    lapCol.append(lapRow);
-
-    const goRow = el('div', 'pgp-row');
-    goRow.style.justifyContent = 'center';
-    goRow.style.gap = '12px';
-    goRow.style.alignItems = 'center';
-    const go = el('button', 'pgp-go', '¡A correr!');
-    go.onclick = () => onStart();
-    go.style.margin = '0';
-    const gear = el('button', 'pgp-go', '⚙ Ajustes');
-    gear.style.cssText = 'margin:0;background:#2f7de0;box-shadow:0 7px 0 #1d5aa8;font-size:20px;padding:12px 22px';
-    gear.onclick = () => onSettings();
-    const online = el('button', 'pgp-go', '👫 Jugar con otros');
-    online.style.cssText = 'margin:0;background:#f07ab0;box-shadow:0 7px 0 #b84a80;font-size:20px;padding:12px 22px';
-    online.onclick = () => onOnline();
-    goRow.append(go, online);
-    if (onSplit) {
-      // Pantalla dividida: solo en computador o tablet con mandos (no en el teléfono).
-      const sp = el('button', 'pgp-go', '👥 2–4 jugadores');
-      sp.style.cssText = 'margin:0;background:#ff9a2a;box-shadow:0 7px 0 #c26a10;font-size:20px;padding:12px 22px';
-      sp.onclick = () => onSplit();
-      goRow.append(sp);
-    }
-    if (onPhone) {
-      // Teléfono como mando para 1 jugador (QR); en «2–4 jugadores» el QR ya está en la pantalla de unirse.
-      const ph = el('button', 'pgp-go', '📱 Mando');
-      ph.title = 'Usar un teléfono como mando';
-      ph.style.cssText = 'margin:0;background:#1fa59a;box-shadow:0 7px 0 #137168;font-size:20px;padding:12px 22px';
-      ph.onclick = () => onPhone();
-      goRow.append(ph);
-    }
-    goRow.append(gear);
-    if (onFullscreen) {
-      const fs = el('button', 'pgp-go', '⛶');
-      fs.title = 'Pantalla completa';
-      fs.setAttribute('aria-label', 'Pantalla completa');
-      fs.style.cssText = 'margin:0;background:#8a4fd8;box-shadow:0 7px 0 #5e2fa3;font-size:24px;padding:10px 18px';
-      fs.onclick = () => onFullscreen();
-      goRow.append(fs);
-    }
-    goRow.style.marginTop = '18px';
-    card.append(goRow);
-    card.append(el('div', 'pgp-hint', status));
-    card.append(el('div', 'pgp-hint', 'Teclado: flechas · Espacio derrapa · Shift objeto · E poder · C mira atrás · F pantalla completa &nbsp;|&nbsp; Mando: B acelera · A frena · R derrapa · L objeto · X poder · − mira atrás'));
+    this.openScreen(wrap, false);
 
     const s = { ...setup };
-    const refresh = (): void => {
+    const change = (): void => onChange({ ...s });
+    type Row = { el: HTMLElement; left?: () => void; right?: () => void; ok?: () => void };
+    const btn = (label: string, cls: string, fn: () => void, title?: string): HTMLButtonElement => {
+      const b = el('button', `pgp-go ${cls}`, label);
+      b.onclick = fn;
+      if (title) {
+        b.title = title;
+        b.setAttribute('aria-label', title);
+      }
+      return b;
+    };
+    const setRows = (rows: Row[], focus = 0): void => {
+      this.menuRows = rows;
+      this.focus = focus;
+      this.menuInput([]);
+    };
+
+    /** Encabezado de los pasos 1 y 2: «1 Peluche · 2 Pista», se puede tocar para saltar. */
+    const steps = (cur: 1 | 2): HTMLElement => {
+      const bar = el('div', 'pgp-steps');
+      ([[1, 'Peluche'], [2, 'Pista']] as const).forEach(([n, label]) => {
+        const b = el('button', `pgp-step${n === cur ? ' on' : n < cur ? ' done' : ''}`);
+        b.innerHTML = `<span class="n">${n < cur ? '✓' : n}</span>${label}`;
+        b.onclick = () => (n === 1 ? stepChar() : stepTrack());
+        bar.append(b);
+      });
+      return bar;
+    };
+    const nav = (back: () => void, next: () => void, nextLabel: string): { row: HTMLElement; rowDef: Row } => {
+      const row = el('div', 'pgp-row pgp-nav');
+      row.append(btn('◀ Atrás', 'alt small', back), btn(nextLabel, 'next', next));
+      return { row, rowDef: { el: row, ok: next, left: back, right: next } };
+    };
+
+    // ---------- Inicio: cómo vamos a jugar ----------
+    const home = (): void => {
+      this.menuBack = null;
+      wrap.classList.add('home');
+      card.replaceChildren();
+      const rows: Row[] = [];
       const ch = CHARACTERS[s.charIndex];
-      powerInfo.innerHTML = `<b>${displayName(ch)}</b> · ${ch.power}: ${ch.powerDesc.toLowerCase()}`;
-      charBtns.forEach((b, i) => b.classList.toggle('sel', i === s.charIndex));
-      for (const c of cards) c.btn.classList.toggle('sel', c.cup ? c.id === s.cup : !s.cup && c.id === s.trackId);
-      cpuBtns.forEach((b, i) => b.classList.toggle('sel', CPU_LEVELS[i].id === s.cpu.id));
-      lapBtns.forEach((b, i) => b.classList.toggle('sel', [2, 3][i] === s.laps));
+      const main = btn('🏁 ¡Jugar!', 'big', stepChar);
+      main.append(el('small', '', `${displayName(ch)} · ${s.cup ? CUPS.find((c) => c.id === s.cup)?.name ?? '' : TRACKS.find((t) => t.id === s.trackId)?.name ?? ''}`));
+      card.append(main);
+      rows.push({ el: main, ok: stepChar });
+      const modes = el('div', 'pgp-modes');
+      if (onSplit) {
+        // Pantalla dividida: solo en computador o tablet con mandos (no en el teléfono).
+        const sp = btn('👥 2–4 jugadores', 'orange', onSplit, 'Pantalla dividida con mandos');
+        sp.append(el('small', '', 'en esta pantalla'));
+        modes.append(sp);
+        rows.push({ el: sp, ok: onSplit });
+      }
+      const on = btn('👫 Jugar con otros', 'pink', onOnline, 'Jugar con otros dispositivos');
+      on.append(el('small', '', 'cada uno en su aparato'));
+      modes.append(on);
+      rows.push({ el: on, ok: onOnline });
+      card.append(modes);
+      const tools = el('div', 'pgp-tools');
+      if (onPhone) {
+        // Teléfono como mando para 1 jugador (QR); en «2–4 jugadores» el QR ya está en la pantalla de unirse.
+        const ph = btn('📱 Mando', 'teal small', onPhone, 'Usar un teléfono como mando');
+        tools.append(ph);
+        rows.push({ el: ph, ok: onPhone });
+      }
+      const gear = btn('⚙ Ajustes', 'alt small', onSettings);
+      tools.append(gear);
+      rows.push({ el: gear, ok: onSettings });
+      if (onFullscreen) {
+        const fs = btn('⛶', 'purple small', onFullscreen, 'Pantalla completa');
+        tools.append(fs);
+        rows.push({ el: fs, ok: onFullscreen });
+      }
+      card.append(tools);
+      if (status) card.append(el('div', 'pgp-hint', status));
+      card.append(el('div', 'pgp-hint keys', 'Teclado: flechas · Espacio derrapa · Shift objeto · E poder · C mira atrás · F pantalla completa &nbsp;|&nbsp; Mando: B acelera · A frena · R derrapa · L objeto · X poder · − mira atrás'));
+      setRows(rows);
     };
-    const setChar = (i: number): void => {
-      s.charIndex = (i + CHARACTERS.length) % CHARACTERS.length;
+
+    // ---------- Paso 1: el peluche ----------
+    const stepChar = (): void => {
+      this.menuBack = home;
+      wrap.classList.remove('home');
+      card.replaceChildren(steps(1));
+      card.append(el('div', 'pgp-label pgp-char-label', 'Elige tu peluche'));
+      const charRow = el('div', 'pgp-row');
+      const chars = el('div', 'pgp-chars');
+      chars.style.width = '100%';
+      charRow.append(chars);
+      const powerInfo = el('div', 'pgp-power-info');
+      const charBtns = CHARACTERS.map((c, i) => {
+        const b = el('button', 'pgp-char');
+        b.innerHTML = `<div class="face" style="background:${cssColor(c.color)}"></div><div class="nm">${displayName(c)}</div><div class="sp">${c.label}</div>`;
+        // Tocar el peluche ya elegido pasa al siguiente paso.
+        b.onclick = () => (i === s.charIndex ? stepTrack() : setChar(i));
+        chars.append(b);
+        return b;
+      });
+      const refresh = (): void => {
+        const ch = CHARACTERS[s.charIndex];
+        powerInfo.innerHTML = `<b>${displayName(ch)}</b> · ${ch.power}: ${ch.powerDesc.toLowerCase()}`;
+        charBtns.forEach((b, i) => b.classList.toggle('sel', i === s.charIndex));
+      };
+      const setChar = (i: number): void => {
+        s.charIndex = (i + CHARACTERS.length) % CHARACTERS.length;
+        refresh();
+        change();
+      };
       refresh();
-      onChange({ ...s });
+      const n = nav(home, stepTrack, 'Siguiente ▶');
+      card.append(charRow, powerInfo, n.row);
+      setRows([{ el: charRow, left: () => setChar(s.charIndex - 1), right: () => setChar(s.charIndex + 1), ok: stepTrack }, n.rowDef]);
     };
-    const setTrack = (id: string): void => {
-      if (id === s.trackId && !s.cup) return;
-      s.trackId = id;
-      s.cup = null;
+
+    // ---------- Paso 2: pista o copa, rivales y vueltas ----------
+    const stepTrack = (): void => {
+      this.menuBack = stepChar;
+      wrap.classList.remove('home');
+      card.replaceChildren(steps(2));
+      card.append(el('div', 'pgp-label pgp-track-label', '¿Dónde corremos?'));
+      const trackRow = el('div', 'pgp-row');
+      const tracks = el('div', 'pgp-tracks');
+      trackRow.append(tracks);
+      // Una fila por copa: sus tres pistas y la copa al final. Las pistas sin copa van detrás.
+      const cupOf = (id: string): number => CUPS.findIndex((c) => c.tracks.includes(id));
+      const ordered = [...TRACKS].sort((a, b) => {
+        const ca = cupOf(a.id) < 0 ? CUPS.length : cupOf(a.id);
+        const cb = cupOf(b.id) < 0 ? CUPS.length : cupOf(b.id);
+        return ca - cb || (ca < CUPS.length ? CUPS[ca].tracks.indexOf(a.id) - CUPS[ca].tracks.indexOf(b.id) : 0);
+      });
+      /** Tarjetas en el orden del menú: pistas (`track`) y copas (`cup`). */
+      const cards: { id: string; cup: boolean; btn: HTMLButtonElement }[] = [];
+      const isSel = (c: { id: string; cup: boolean }): boolean => (c.cup ? c.id === s.cup : !s.cup && c.id === s.trackId);
+      const trackCard = (t: (typeof TRACKS)[number]): void => {
+        const b = el('button', 'pgp-track');
+        if (t.ready) {
+          b.append(trackThumb(t));
+          b.onclick = () => (!s.cup && s.trackId === t.id ? start() : setTrack(t.id));
+        } else {
+          b.disabled = true;
+          b.append(el('div', 'lock', '🔒'));
+        }
+        const txt = el('div');
+        b.title = t.ready ? `${t.name}: ${t.blurb.toLowerCase()}` : `${t.name}: pronto`;
+        txt.append(el('div', 'nm', t.name), el('div', 'nm short', t.name.replace(/^El |^La /, '').split(' ')[0]), el('div', 'sp', t.ready ? t.blurb : 'Pronto'));
+        b.append(txt);
+        tracks.append(b);
+        cards.push({ id: t.id, cup: false, btn: b });
+      };
+      const cupCard = (c: (typeof CUPS)[number]): void => {
+        const b = el('button', 'pgp-track');
+        b.append(el('div', 'cupicon', c.icon));
+        const txt = el('div');
+        txt.append(el('div', 'nm', c.name), el('div', 'nm short', c.short), el('div', 'sp', c.blurb));
+        b.append(txt);
+        b.title = `${c.name}: ${c.blurb.toLowerCase()}, seguidas y con puntos`;
+        b.onclick = () => (s.cup === c.id ? start() : setCup(c.id));
+        tracks.append(b);
+        cards.push({ id: c.id, cup: true, btn: b });
+      };
+      for (const t of ordered) {
+        trackCard(t);
+        const ci = cupOf(t.id);
+        if (ci >= 0 && CUPS[ci].tracks[CUPS[ci].tracks.length - 1] === t.id) cupCard(CUPS[ci]);
+      }
+      // Qué se eligió, en palabras: una pista suelta o una copa de 3 carreras.
+      const info = el('div', 'pgp-power-info');
+
+      const opts = el('div', 'pgp-opts');
+      const cpuCol = el('div');
+      const lapCol = el('div');
+      opts.append(cpuCol, lapCol);
+      cpuCol.append(el('div', 'pgp-label', 'Rivales'));
+      const cpuRow = el('div', 'pgp-row');
+      const cpuBtns = CPU_LEVELS.map((lv) => {
+        const b = el('button', 'pgp-opt', lv.label);
+        b.onclick = () => setCpu(lv);
+        cpuRow.append(b);
+        return b;
+      });
+      cpuCol.append(cpuRow);
+      lapCol.append(el('div', 'pgp-label', 'Vueltas'));
+      const lapRow = el('div', 'pgp-row');
+      const lapBtns = [2, 3].map((n) => {
+        const b = el('button', 'pgp-opt', String(n));
+        b.onclick = () => setLaps(n);
+        lapRow.append(b);
+        return b;
+      });
+      lapCol.append(lapRow);
+
+      const refresh = (): void => {
+        for (const c of cards) c.btn.classList.toggle('sel', isSel(c));
+        const cup = CUPS.find((c) => c.id === s.cup);
+        const t = TRACKS.find((x) => x.id === s.trackId);
+        info.innerHTML = cup ? `<b>${cup.icon} ${cup.name}</b> · ${cup.blurb}, seguidas y con puntos` : t ? `<b>${t.name}</b> · ${t.blurb}` : '';
+        cpuBtns.forEach((b, i) => b.classList.toggle('sel', CPU_LEVELS[i].id === s.cpu.id));
+        lapBtns.forEach((b, i) => b.classList.toggle('sel', [2, 3][i] === s.laps));
+      };
+      const setTrack = (id: string): void => {
+        if (id === s.trackId && !s.cup) return;
+        s.trackId = id;
+        s.cup = null;
+        refresh();
+        change();
+      };
+      const setCup = (id: string): void => {
+        if (s.cup === id) return;
+        s.cup = id;
+        refresh();
+        change();
+      };
+      const step = (d: number): void => {
+        // En el orden de las tarjetas: cada copa tras sus pistas.
+        const list = cards.filter((c) => !c.btn.disabled);
+        const i = list.findIndex(isSel);
+        const next = list[Math.max(0, Math.min(list.length - 1, i + d))];
+        if (next.cup) setCup(next.id);
+        else setTrack(next.id);
+      };
+      const setCpu = (lv: CpuLevel): void => {
+        s.cpu = lv;
+        refresh();
+        change();
+      };
+      const setLaps = (n: number): void => {
+        s.laps = n;
+        refresh();
+        change();
+      };
+      const start = (): void => onStart();
       refresh();
-      onChange({ ...s });
+      const n = nav(stepChar, start, '¡A correr!');
+      card.append(trackRow, info, opts, n.row);
+      const cpuIdx = (): number => CPU_LEVELS.findIndex((l) => l.id === s.cpu.id);
+      setRows([
+        { el: trackRow, left: () => step(-1), right: () => step(1) },
+        { el: cpuRow, left: () => setCpu(CPU_LEVELS[Math.max(0, cpuIdx() - 1)]), right: () => setCpu(CPU_LEVELS[Math.min(CPU_LEVELS.length - 1, cpuIdx() + 1)]) },
+        { el: lapRow, left: () => setLaps(2), right: () => setLaps(3) },
+        n.rowDef,
+      ]);
     };
-    const setCup = (id: string): void => {
-      if (s.cup === id) return;
-      s.cup = id;
-      refresh();
-      onChange({ ...s });
-    };
-    const stepTrack = (d: number): void => {
-      // En el orden de las tarjetas: cada copa tras sus pistas.
-      const opts = cards.filter((c) => !c.btn.disabled);
-      const i = opts.findIndex((c) => (c.cup ? c.id === s.cup : !s.cup && c.id === s.trackId));
-      const next = opts[Math.max(0, Math.min(opts.length - 1, i + d))];
-      if (next.cup) setCup(next.id);
-      else setTrack(next.id);
-    };
-    const setCpu = (lv: CpuLevel): void => {
-      s.cpu = lv;
-      refresh();
-      onChange({ ...s });
-    };
-    const setLaps = (n: number): void => {
-      s.laps = n;
-      refresh();
-      onChange({ ...s });
-    };
-    refresh();
-    this.openScreen(wrap, false);
-    const cpuIdx = (): number => CPU_LEVELS.findIndex((l) => l.id === s.cpu.id);
-    this.menuRows = [
-      { el: charRow, left: () => setChar(s.charIndex - 1), right: () => setChar(s.charIndex + 1) },
-      { el: trackRow, left: () => stepTrack(-1), right: () => stepTrack(1) },
-      { el: cpuRow, left: () => setCpu(CPU_LEVELS[Math.max(0, cpuIdx() - 1)]), right: () => setCpu(CPU_LEVELS[Math.min(CPU_LEVELS.length - 1, cpuIdx() + 1)]) },
-      { el: lapRow, left: () => setLaps(2), right: () => setLaps(3) },
-      { el: goRow, ok: onStart, right: onSettings },
-    ];
-    this.focus = 0;
-    this.menuInput([]);
-    charRow.classList.add('focus');
+
+    home();
   }
 
   showPause(onResume: () => void, onRestart: (() => void) | null, onMenu: () => void, onSettings: () => void, onFullscreen: (() => void) | null, menuLabel = 'Menú'): void {
